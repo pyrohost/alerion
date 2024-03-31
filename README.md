@@ -19,4 +19,4 @@ Due to the nature of this project, the roadmap is subject to change at any time.
 
 ## License
 
-This project is licensed under the Business Source License. See the [LICENSE](LICENSE) file for more information.
+This project is licensed under the Pyro Source Available License. See the [LICENSE](LICENSE) file for more information.
