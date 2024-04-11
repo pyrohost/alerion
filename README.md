@@ -2,9 +2,10 @@
 
 A complete rewrite of pterodactyl wings.
 
-## Roadmap
+> [!CAUTION]
+> Here be dragons. This project is still a huge work in progress and is not ready for production use. If you're looking for a stable and reliable solution, please use the official pterodactyl wings for the time being.
 
-This project is still a work in progress. Here are some of the key features and improvements we're planning to implement:
+## Roadmap
 
 - [ ] Understand and implement how the wings server authenticates with the panel.
 - [ ] Implement all the API endpoints.
