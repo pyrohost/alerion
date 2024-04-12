@@ -1,0 +1,12 @@
+[package]
+name = "config"
+description  = "Alerion configuration file management"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0.197", features = ["derive"] }
+serde_yaml = "0.9.34"
+thiserror = "1.0.58"
+tokio = { version = "1.37.0", features = ["fs"] }
+uuid = "1.8.0"

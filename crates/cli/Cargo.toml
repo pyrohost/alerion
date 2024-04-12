@@ -1,0 +1,10 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alerion = { version = "0.1.0", path = "../alerion" }
+anyhow = "1.0.82"
+env_logger = "0.11.3"
+tokio = { version = "1.37.0", features = ["rt", "macros"] }

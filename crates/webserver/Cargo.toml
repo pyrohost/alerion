@@ -1,0 +1,16 @@
+[package]
+name = "webserver"
+description = "Alerion webserver/router implementation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.5.1"
+alerion-config = { package = "config", version = "0.1.0", path = "../config" }
+alerion-websocket = { package = "websocket", version = "0.1.0", path = "../websocket" }
+alerion-servers = { package = "servers", version = "0.1.0", path = "../servers" }
+futures = "0.3.30"
+log = "0.4.21"
+pin-project-lite = "0.2.14"
+serde = { version = "1.0.197", features = ["derive"] }
+uuid = { version = "1.8.0", features = ["serde"] }

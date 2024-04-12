@@ -1,0 +1,12 @@
+[package]
+name = "servers"
+description = "Alerion server management system"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix = "0.13.3"
+uuid = "1.8.0"
+alerion_websocket = { package = "websocket", version = "0.1.0", path = "../websocket" }
+tokio = { version = "1.37.0", features = ["rt"] }
+actix-web-actors = "4.3.0"
