@@ -62,7 +62,7 @@ impl WebsocketConnectionImpl {
 
     pub fn handle_text(&self, msg: &str, ctx: &mut <Self as Actor>::Context) -> Option<()> {
         // todo: behavior on bad JSON payload? right now just ignore
-        let event = IncomingEvent::try_parse(&msg)?;
+        let event = IncomingEvent::try_parse(msg)?;
 
         match event.event() {
             EventType::Authentication => {

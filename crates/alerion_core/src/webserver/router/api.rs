@@ -13,9 +13,11 @@ pub struct CreateServer {
 }
 
 pub async fn servers_post(
-    _opts: web::Json<CreateServer>,
-    _server_pool: web::Data<Arc<ServerPool>>,
+    opts: web::Json<CreateServer>,
+    server_pool: web::Data<Arc<ServerPool>>,
 ) -> impl Responder {
+    server_pool.create_server(opts.uuid).await;
+
     HttpResponse::Accepted()
 }
 

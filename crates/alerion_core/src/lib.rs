@@ -12,14 +12,15 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     // - other stuff :33
 
     let config_file = ConfigFile::open_default().await?; 
+    let config = config_file.config();
 
-    let server_pool = Arc::new(ServerPool::new());
+    let server_pool = Arc::new(ServerPool::builder(&config).build());
 
-    server_pool.create_server("0e4059ca-d79b-46a5-8ec4-95bd0736d150".try_into().unwrap()).await;
+    //server_pool.create_server("0e4059ca-d79b-46a5-8ec4-95bd0736d150".try_into().unwrap()).await;
 
     // there is a low likelyhood this will actually block, and if it does
     // it will block only once for a short amount of time, so it's no big deal.
-    let webserver = Webserver::make(config_file.config(), Arc::clone(&server_pool))?;
+    let webserver = Webserver::make(config, Arc::clone(&server_pool))?;
 
     let webserver_handle = tokio::spawn(async move {
         let _result = webserver.serve().await;

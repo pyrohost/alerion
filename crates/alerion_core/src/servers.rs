@@ -3,25 +3,58 @@ use std::collections::HashMap;
 use std::sync::{Arc, atomic::{Ordering, AtomicU32}};
 use crate::websocket::message::PanelMessage;
 use crate::websocket::relay::{ServerConnection, AuthTracker, ClientConnection};
+use crate::config::AlerionConfig;
 use uuid::Uuid;
 use tokio::sync::{Mutex, RwLock};
 use tokio::sync::mpsc::{channel, Sender, Receiver};
+use reqwest::header::{self, HeaderMap};
 
-#[derive(Default)]
-pub struct ServerPool {
-    servers: RwLock<HashMap<Uuid, Arc<Server>>>,
+pub struct ServerPoolBuilder {
+    servers: HashMap<Uuid, Arc<Server>>,
+    http_client: reqwest::Client,
 }
 
-impl ServerPool {
-    pub fn new() -> Self {
+impl ServerPoolBuilder {
+    pub fn from_config(config: &AlerionConfig) -> Self {
+        let token_id = &config.token_id;
+        let token = &config.token;
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::AUTHORIZATION, format!("Bearer {token_id}.{token}").parse().unwrap());
+
         Self {
-            servers: RwLock::new(HashMap::new()),
+            servers: HashMap::new(),
+            http_client: reqwest::Client::builder()
+                .user_agent("alerion/0.1.0")
+                .default_headers(headers)
+                .build()
+                .unwrap()
         }
     }
 
-    pub async fn create_server(&self, uuid: Uuid) {
-        let server = Server::new(uuid);
-        self.servers.write().await.insert(uuid, Arc::new(server));
+    pub fn build(self) -> ServerPool {
+        ServerPool {
+            servers: RwLock::new(self.servers),
+            http_client: self.http_client,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct ServerPool {
+    servers: RwLock<HashMap<Uuid, Arc<Server>>>, 
+    http_client: reqwest::Client,
+}
+
+impl ServerPool {
+    pub fn builder(config: &AlerionConfig) -> ServerPoolBuilder {
+        ServerPoolBuilder::from_config(config)
+    }
+
+    pub async fn create_server(&self, uuid: Uuid) -> Arc<Server> {
+        let server = Arc::new(Server::new(uuid));
+        self.servers.write().await.insert(uuid, Arc::clone(&server));
+        server
     }
 
     pub async fn get(&self, uuid: Uuid) -> Option<Arc<Server>> {
@@ -39,7 +72,8 @@ impl ServerPool {
             }
 
             None => {
-                todo!()
+                drop(map);
+                self.create_server(uuid).await
             }
         }
     }
