@@ -1,7 +1,7 @@
 use std::sync::Arc;
-use alerion_webserver::Webserver;
-use alerion_config::ConfigFile;
-use alerion_servers::InstallPool;
+use webserver::Webserver;
+use config::ConfigFile;
+use servers::ServerPool;
 use futures::stream::{StreamExt, FuturesUnordered};
 
 /// Alerion main entrypoint. Expects a tokio runtime to be setup.
@@ -13,11 +13,13 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     let config_file = ConfigFile::open_default().await?; 
 
-    let install_pool = Arc::new(InstallPool::new());
+    let server_pool = Arc::new(ServerPool::new());
+
+    server_pool.create_server("0e4059ca-d79b-46a5-8ec4-95bd0736d150".try_into().unwrap()).await;
 
     // there is a low likelyhood this will actually block, and if it does
     // it will block only once for a short amount of time, so it's no big deal.
-    let webserver = Webserver::make(config_file.config(), Arc::clone(&install_pool))?;
+    let webserver = Webserver::make(config_file.config(), Arc::clone(&server_pool))?;
 
     let webserver_handle = tokio::spawn(async move {
         let _result = webserver.serve().await;
@@ -36,3 +38,9 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+pub mod config;
+pub mod servers;
+pub mod webserver;
+pub mod websocket;
+

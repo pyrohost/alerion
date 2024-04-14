@@ -1,8 +1,10 @@
+use std::sync::Arc;
 use actix_web::{Responder, HttpResponse};
 use actix_web::web;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
-use crate::SystemOptions;
+use crate::servers::ServerPool;
+use crate::webserver::SystemOptions;
 
 #[derive(Serialize, Deserialize)]
 pub struct CreateServer {
@@ -10,7 +12,10 @@ pub struct CreateServer {
     start_on_completion: bool,
 }
 
-pub async fn servers_post(_opts: web::Json<CreateServer>) -> impl Responder {
+pub async fn servers_post(
+    _opts: web::Json<CreateServer>,
+    _server_pool: web::Data<Arc<ServerPool>>,
+) -> impl Responder {
     HttpResponse::Accepted()
 }
 

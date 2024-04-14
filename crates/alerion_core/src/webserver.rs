@@ -7,10 +7,10 @@ use actix_web::http::header;
 use actix_web::web;
 use actix_web::guard;
 use actix_web::dev;
-use alerion_config::AlerionConfig;
-use alerion_servers::InstallPool;
+use crate::config::AlerionConfig;
+use crate::servers::ServerPool;
 use serde::{Serialize, Deserialize};
-use crate::utils::bearer_auth::BearerAuth;
+use utils::bearer_auth::BearerAuth;
 
 const ALLOWED_HEADERS: &str = "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token";
 const ALLOWED_METHODS: &str = "GET, POST, PATCH, PUT, DELETE, OPTIONS";
@@ -40,7 +40,7 @@ pub struct Webserver {
 impl Webserver {
     /// Build the webserver. May block if a DNS lookup is required to resolve the host
     /// set in the configuration.
-    pub fn make(config: AlerionConfig, install_pool: Arc<InstallPool>) -> io::Result<Self> {
+    pub fn make(config: AlerionConfig, server_pool: Arc<ServerPool>) -> io::Result<Self> {
         let moved_out_config = config.clone();
 
         let http_server = HttpServer::new(move || {
@@ -58,7 +58,7 @@ impl Webserver {
             App::new()
                 .app_data(web::Data::new(base_system_options))
                 .app_data(web::Data::new(config.clone()))
-                .app_data(web::Data::new(Arc::clone(&install_pool)))
+                .app_data(web::Data::new(Arc::clone(&server_pool)))
                 .wrap(default_headers(&config))
                 .wrap(utils::camel_case::CamelCaseHeaders)
                 .wrap(middleware::Logger::new("%r"))
