@@ -10,6 +10,50 @@ use super::message::ServerMessage;
 use super::auth::Auth;
 use super::relay::ServerConnection;
 
+#[derive(Debug, Default)]
+struct Permissions {
+    pub connect: bool,
+    pub start: bool,
+    pub stop: bool,
+    pub restart: bool,
+    pub console: bool,
+    pub backup_read: bool,
+    pub admin_errors: bool,
+    pub admin_install: bool,
+    pub admin_transfer: bool,
+}
+
+impl Permissions {
+    pub fn from_strings(strings: &[impl AsRef<str>]) -> Self {
+        let mut this = Permissions::default();
+
+        for s in strings {
+            match s.as_ref() {
+                "*" => {
+                    this.connect = true;
+                    this.start = true;
+                    this.stop = true;
+                    this.restart = true;
+                    this.console = true;
+                    this.backup_read = true;
+                }
+                "websocket.connect" => { this.connect = true; }
+                "control.start" => { this.start = true; }
+                "control.stop" => { this.stop = true; }
+                "control.restart" => { this.restart = true; }
+                "control.console" => { this.console = true; }
+                "backup.read" => { this.backup_read = true; }
+                "admin.websocket.errors" => { this.admin_errors = true; }
+                "admin.websocket.install" => { this.admin_install = true; }
+                "admin.websocket.transfer" => { this.admin_transfer = true; }
+                _ => {},
+            }
+        }
+
+        this
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum EventType {
     #[serde(rename = "auth")]

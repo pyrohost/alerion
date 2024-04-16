@@ -5,32 +5,6 @@ use uuid::Uuid;
 use relay::ServerConnection;
 use crate::config::AlerionConfig;
 
-
-#[derive(Debug, Default)]
-struct Permissions {
-    pub connect: bool,
-}
-
-impl Permissions {
-    pub fn from_strings(strings: &[impl AsRef<str>]) -> Self {
-        let mut this = Permissions::default();
-
-        for s in strings {
-            match s.as_ref() {
-                "*" => {
-                    this.connect = true;
-                }
-                "websocket.connect" => { this.connect = true; }
-                _what => {
-                    // unknown permission..
-                }
-            }
-        }
-
-        this
-    }
-}
-
 pub fn start_websocket(
     server_uuid: Uuid,
     config: &AlerionConfig,
