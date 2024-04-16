@@ -1,10 +1,11 @@
+use std::io;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
-use std::io;
-use serde::{Serialize, Deserialize};
-use uuid::Uuid;
-use tokio::fs;
+
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::fs;
+use uuid::Uuid;
 
 #[cfg(target_os = "linux")]
 const DEFAULT_LOCATION: &str = "/etc/alerion/";
@@ -16,10 +17,7 @@ const CONFIG_FILE_NAME: &str = "config.yml";
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("couldn't read configuration file at '{path}' ({io_e})")]
-    Io {
-        path: PathBuf,
-        io_e: Box<io::Error>,
-    },
+    Io { path: PathBuf, io_e: Box<io::Error> },
     #[error("couldn't parse configuration file: {0}")]
     Yaml(#[from] serde_yaml::Error),
 }
@@ -73,4 +71,3 @@ impl ConfigFile {
         self.last_fetched_data.clone()
     }
 }
-

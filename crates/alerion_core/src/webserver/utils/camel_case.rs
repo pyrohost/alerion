@@ -1,10 +1,11 @@
-use futures::ready;
-use pin_project_lite::pin_project;
-use actix_web::dev::{forward_ready, Service, Transform, ServiceRequest, ServiceResponse};
-use actix_web::Error;
-use std::future::{ready, Ready, Future};
+use std::future::{ready, Future, Ready};
 use std::pin::Pin;
 use std::task::{Context, Poll};
+
+use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
+use actix_web::Error;
+use futures::ready;
+use pin_project_lite::pin_project;
 
 pin_project! {
     pub struct DefaultHeaderFuture<S: Service<ServiceRequest>> {
@@ -37,11 +38,11 @@ where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
 {
-    type Response = ServiceResponse<B>;
     type Error = Error;
-    type Transform = CamelCaseHeadersMiddleware<S>;
-    type InitError = ();
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
+    type InitError = ();
+    type Response = ServiceResponse<B>;
+    type Transform = CamelCaseHeadersMiddleware<S>;
 
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(CamelCaseHeadersMiddleware { service }))
@@ -57,9 +58,9 @@ where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
 {
-    type Response = ServiceResponse<B>;
     type Error = Error;
     type Future = DefaultHeaderFuture<S>;
+    type Response = ServiceResponse<B>;
 
     forward_ready!(service);
 

@@ -1,7 +1,8 @@
 use std::sync::Arc;
-use actix_web::{HttpRequest, HttpResponse};
-use actix_web::web;
+
+use actix_web::{web, HttpRequest, HttpResponse};
 use uuid::Uuid;
+
 use crate::config::AlerionConfig;
 use crate::servers::ServerPool;
 use crate::websocket::relay::ClientConnection;
@@ -21,12 +22,12 @@ pub async fn ws(
         let (conn, auth_tracker) = server.new_connection_with_auth_tracker();
         let (addr, resp) = crate::websocket::start_websocket(uuid, &config, conn, &req, payload)?;
 
-        server.add_websocket(ClientConnection::new(auth_tracker, addr)).await;
+        server
+            .add_websocket(ClientConnection::new(auth_tracker, addr))
+            .await;
 
         Ok(resp)
     } else {
         Ok(HttpResponse::NotImplemented().into())
     }
-
-
 }

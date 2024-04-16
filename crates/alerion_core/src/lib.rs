@@ -1,8 +1,9 @@
 use std::sync::Arc;
-use webserver::Webserver;
+
 use config::ConfigFile;
+use futures::stream::{FuturesUnordered, StreamExt};
 use servers::ServerPool;
-use futures::stream::{StreamExt, FuturesUnordered};
+use webserver::Webserver;
 
 /// Alerion main entrypoint. Expects a tokio runtime to be setup.
 pub async fn alerion_main() -> anyhow::Result<()> {
@@ -11,7 +12,7 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     // - create webserver
     // - other stuff :33
 
-    let config_file = ConfigFile::open_default().await?; 
+    let config_file = ConfigFile::open_default().await?;
     let config = config_file.config();
 
     let server_pool = Arc::new(ServerPool::builder(&config).build());
@@ -33,7 +34,7 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     loop {
         match handles.next().await {
             None => break,
-            Some(_result) => {},
+            Some(_result) => {}
         }
     }
 
@@ -44,4 +45,3 @@ pub mod config;
 pub mod servers;
 pub mod webserver;
 pub mod websocket;
-

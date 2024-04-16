@@ -1,13 +1,16 @@
-use std::time::Instant;
 use std::collections::HashMap;
-use std::sync::{Arc, atomic::{Ordering, AtomicU32}};
-use crate::websocket::conn::PanelMessage;
-use crate::websocket::relay::{ServerConnection, AuthTracker, ClientConnection};
-use crate::config::AlerionConfig;
-use uuid::Uuid;
-use tokio::sync::{Mutex, RwLock};
-use tokio::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
+
 use reqwest::header::{self, HeaderMap};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::{Mutex, RwLock};
+use uuid::Uuid;
+
+use crate::config::AlerionConfig;
+use crate::websocket::conn::PanelMessage;
+use crate::websocket::relay::{AuthTracker, ClientConnection, ServerConnection};
 
 pub struct ServerPoolBuilder {
     servers: HashMap<Uuid, Arc<Server>>,
@@ -20,7 +23,10 @@ impl ServerPoolBuilder {
         let token = &config.token;
 
         let mut headers = HeaderMap::new();
-        headers.insert(header::AUTHORIZATION, format!("Bearer {token_id}.{token}").parse().unwrap());
+        headers.insert(
+            header::AUTHORIZATION,
+            format!("Bearer {token_id}.{token}").parse().unwrap(),
+        );
 
         Self {
             servers: HashMap::new(),
@@ -28,7 +34,7 @@ impl ServerPoolBuilder {
                 .user_agent("alerion/0.1.0")
                 .default_headers(headers)
                 .build()
-                .unwrap()
+                .unwrap(),
         }
     }
 
@@ -42,7 +48,7 @@ impl ServerPoolBuilder {
 
 #[derive(Default)]
 pub struct ServerPool {
-    servers: RwLock<HashMap<Uuid, Arc<Server>>>, 
+    servers: RwLock<HashMap<Uuid, Arc<Server>>>,
     http_client: reqwest::Client,
 }
 
@@ -60,16 +66,14 @@ impl ServerPool {
     pub async fn get(&self, uuid: Uuid) -> Option<Arc<Server>> {
         self.servers.read().await.get(&uuid).map(Arc::clone)
     }
-    
+
     pub async fn get_or_create(&self, uuid: Uuid) -> Arc<Server> {
         // initially try to read, because most of the times we'll only need to read
         // and we can therefore reduce waiting by a lot using a read-write lock.
         let map = self.servers.read().await;
 
         match map.get(&uuid) {
-            Some(s) => {
-                Arc::clone(s)
-            }
+            Some(s) => Arc::clone(s),
 
             None => {
                 drop(map);
@@ -115,7 +119,10 @@ impl Server {
         let auth_tracker_clone = Arc::clone(&auth_tracker);
         let sender = self.sender_copy.clone();
 
-        (ServerConnection::new(auth_tracker, sender), auth_tracker_clone)
+        (
+            ServerConnection::new(auth_tracker, sender),
+            auth_tracker_clone,
+        )
     }
 
     pub fn server_time(&self) -> u64 {
@@ -130,9 +137,7 @@ async fn task_websocket_receiver(mut receiver: Receiver<PanelMessage>) {
                 println!("{:?}", msg)
             }
 
-            None => {
-
-            }
+            None => {}
         }
     }
 }

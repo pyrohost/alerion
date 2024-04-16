@@ -1,8 +1,9 @@
 use std::sync::Arc;
-use actix_web::{Responder, HttpResponse};
-use actix_web::web;
-use serde::{Serialize, Deserialize};
+
+use actix_web::{web, HttpResponse, Responder};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
 use crate::servers::ServerPool;
 use crate::webserver::SystemOptions;
 
@@ -29,7 +30,7 @@ pub async fn system_get(system_options: web::Data<SystemOptions>) -> impl Respon
     web::Json(system_options)
 }
 
-pub mod update;
 pub mod servers;
+pub mod update;
 
 pub use update::update_post;

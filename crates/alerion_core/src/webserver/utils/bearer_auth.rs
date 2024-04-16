@@ -1,14 +1,14 @@
-use actix_web::body::BoxBody;
-use futures::ready;
-use pin_project_lite::pin_project;
-use actix_web::HttpResponse;
-use actix_web::dev::{forward_ready, Service, Transform, ServiceRequest, ServiceResponse};
-use actix_web::http::header;
-use actix_web::Error;
-use std::future::{ready, Ready, Future};
+use std::future::{ready, Future, Ready};
 use std::pin::Pin;
 use std::task::{Context, Poll};
+
+use actix_web::body::BoxBody;
+use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
+use actix_web::http::header;
+use actix_web::{Error, HttpResponse};
+use futures::ready;
 use log::info;
+use pin_project_lite::pin_project;
 
 pin_project! {
     #[project = BearerAuthFutureProjected]
@@ -61,14 +61,17 @@ where
     S: Service<ServiceRequest, Response = ServiceResponse<BoxBody>, Error = Error>,
     S::Future: 'static,
 {
-    type Response = ServiceResponse<BoxBody>;
     type Error = Error;
-    type Transform = BearerAuthMiddleware<S>;
-    type InitError = ();
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
+    type InitError = ();
+    type Response = ServiceResponse<BoxBody>;
+    type Transform = BearerAuthMiddleware<S>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(BearerAuthMiddleware { service, token: self.token.clone() }))
+        ready(Ok(BearerAuthMiddleware {
+            service,
+            token: self.token.clone(),
+        }))
     }
 }
 
@@ -82,16 +85,17 @@ where
     S: Service<ServiceRequest, Response = ServiceResponse<BoxBody>, Error = Error>,
     S::Future: 'static,
 {
-    type Response = ServiceResponse<BoxBody>;
     type Error = Error;
     type Future = BearerAuthFuture<S>;
+    type Response = ServiceResponse<BoxBody>;
 
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let headers = req.request().headers();
-        
-        let auth_ok = headers.get(header::AUTHORIZATION)
+
+        let auth_ok = headers
+            .get(header::AUTHORIZATION)
             .and_then(|content| content.to_str().ok())
             .filter(|s| bearer_matches_token(s, &self.token))
             .is_some();
@@ -100,15 +104,17 @@ where
             use std::io::{stdout, Write};
             stdout().flush().unwrap();
         }
-        
+
         match auth_ok {
-            true => BearerAuthFuture::Ok { ok_fut: self.service.call(req) },
+            true => BearerAuthFuture::Ok {
+                ok_fut: self.service.call(req),
+            },
             false => {
                 let (req, _) = req.into_parts();
                 let resp = ServiceResponse::new(req, HttpResponse::Unauthorized().body(()));
                 let err_fut = ready(Ok(resp));
                 BearerAuthFuture::Err { err_fut }
-            },
+            }
         }
     }
 }

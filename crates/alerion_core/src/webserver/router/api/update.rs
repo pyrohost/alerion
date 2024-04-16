@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
-use actix_web::Responder;
-use actix_web::web;
-use serde::{Serialize, Deserialize};
+
+use actix_web::{web, Responder};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -49,7 +49,8 @@ pub struct ConfigUpdate {
 
 #[derive(Debug, Serialize)]
 pub struct ConfigUpdateResponse {
-    applied: bool, }
+    applied: bool,
+}
 
 pub async fn update_post(_payload: web::Json<ConfigUpdate>) -> impl Responder {
     web::Json(ConfigUpdateResponse { applied: false })

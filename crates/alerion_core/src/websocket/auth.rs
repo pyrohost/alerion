@@ -1,8 +1,10 @@
 use std::collections::HashSet;
-use crate::config::AlerionConfig;
-use serde::{Serialize, Deserialize};
-use jsonwebtoken::{DecodingKey, Validation, Algorithm};
+
+use jsonwebtoken::{Algorithm, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use crate::config::AlerionConfig;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -16,7 +18,7 @@ struct Claims {
     permissions: Vec<String>,
     user_uuid: Uuid,
     user_id: usize,
-    unique_id: String, 
+    unique_id: String,
 }
 
 pub struct Auth {
@@ -27,7 +29,8 @@ pub struct Auth {
 impl Auth {
     pub fn from_config(cfg: &AlerionConfig) -> Self {
         let mut validation = Validation::new(Algorithm::HS256);
-        validation.required_spec_claims = HashSet::from(["exp", "nbf", "aud", "iss"].map(ToOwned::to_owned));
+        validation.required_spec_claims =
+            HashSet::from(["exp", "nbf", "aud", "iss"].map(ToOwned::to_owned));
         validation.leeway = 10;
         validation.reject_tokens_expiring_in_less_than = 0;
         validation.validate_exp = false;
@@ -45,9 +48,7 @@ impl Auth {
     pub fn is_valid(&self, auth: &str, server_uuid: &Uuid) -> bool {
         jsonwebtoken::decode::<Claims>(auth, &self.key, &self.validation)
             .ok()
-            .filter(|result| {
-                &result.claims.server_uuid == server_uuid
-            })
+            .filter(|result| &result.claims.server_uuid == server_uuid)
             .is_some()
     }
 }

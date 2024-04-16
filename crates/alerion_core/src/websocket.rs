@@ -1,8 +1,8 @@
-use actix_web::{HttpRequest, HttpResponse};
-use actix_web::web;
+use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
-use uuid::Uuid;
 use relay::ServerConnection;
+use uuid::Uuid;
+
 use crate::config::AlerionConfig;
 
 pub fn start_websocket(
@@ -16,6 +16,6 @@ pub fn start_websocket(
     ws::WsResponseBuilder::new(conn, req, payload).start_with_addr()
 }
 
-pub mod relay;
 pub mod auth;
 pub mod conn;
+pub mod relay;

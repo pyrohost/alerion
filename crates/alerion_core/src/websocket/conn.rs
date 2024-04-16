@@ -1,19 +1,21 @@
 use std::convert::Infallible;
+
+use actix::{Actor, ActorContext, Addr, Handler, StreamHandler};
 use actix_web_actors::ws;
-use actix::{Handler, StreamHandler, Actor, Addr, ActorContext};
-use uuid::Uuid;
 use bytestring::ByteString;
-use serde::{Serialize, Deserialize};
-use crate::config::AlerionConfig;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
 use super::auth::Auth;
 use super::relay::ServerConnection;
+use crate::config::AlerionConfig;
 
 macro_rules! impl_infallible_message {
     ($msg_ty:ty) => {
         impl actix::Message for $msg_ty {
             type Result = std::result::Result<(), std::convert::Infallible>;
         }
-    }
+    };
 }
 
 #[derive(Debug)]
@@ -34,7 +36,6 @@ pub struct RawMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     args: Option<serde_json::Value>,
 }
-
 
 impl_infallible_message!(ServerMessage);
 impl_infallible_message!(PanelMessage);
@@ -67,16 +68,34 @@ impl Permissions {
                     this.console = true;
                     this.backup_read = true;
                 }
-                "websocket.connect" => { this.connect = true; }
-                "control.start" => { this.start = true; }
-                "control.stop" => { this.stop = true; }
-                "control.restart" => { this.restart = true; }
-                "control.console" => { this.console = true; }
-                "backup.read" => { this.backup_read = true; }
-                "admin.websocket.errors" => { this.admin_errors = true; }
-                "admin.websocket.install" => { this.admin_install = true; }
-                "admin.websocket.transfer" => { this.admin_transfer = true; }
-                _ => {},
+                "websocket.connect" => {
+                    this.connect = true;
+                }
+                "control.start" => {
+                    this.start = true;
+                }
+                "control.stop" => {
+                    this.stop = true;
+                }
+                "control.restart" => {
+                    this.restart = true;
+                }
+                "control.console" => {
+                    this.console = true;
+                }
+                "backup.read" => {
+                    this.backup_read = true;
+                }
+                "admin.websocket.errors" => {
+                    this.admin_errors = true;
+                }
+                "admin.websocket.install" => {
+                    this.admin_install = true;
+                }
+                "admin.websocket.transfer" => {
+                    this.admin_transfer = true;
+                }
+                _ => {}
             }
         }
 
@@ -125,16 +144,13 @@ impl From<RawMessage> for ByteString {
 
 impl RawMessage {
     pub fn new_no_args(event: EventType) -> Self {
-        Self {
-            event,
-            args: None,
-        }
+        Self { event, args: None }
     }
 
     pub fn into_first_arg(self) -> Option<String> {
         let mut args = self.args?;
         let json_str = args.get_mut(0)?.take();
-        
+
         match json_str {
             serde_json::Value::String(s) => Some(s),
             _ => None,
@@ -178,10 +194,12 @@ impl Handler<ServerMessage> for WebsocketConnectionImpl {
 }
 
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebsocketConnectionImpl {
-    fn handle(&mut self, item: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) { 
+    fn handle(&mut self, item: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         use ws::Message;
         // just ignore bad messages
-        let Ok(msg) = item else { return; };
+        let Ok(msg) = item else {
+            return;
+        };
 
         match msg {
             Message::Text(t) => {
@@ -207,7 +225,10 @@ impl WebsocketConnectionImpl {
 
         match event.event() {
             EventType::Authentication => {
-                if self.auth.is_valid(&event.into_first_arg()?, &self.server_uuid) {
+                if self
+                    .auth
+                    .is_valid(&event.into_first_arg()?, &self.server_uuid)
+                {
                     self.server_conn.set_authenticated();
                     ctx.text(RawMessage::new_no_args(EventType::AuthenticationSuccess));
                 }
@@ -225,11 +246,13 @@ impl WebsocketConnectionImpl {
                         }
 
                         EventType::SendStats => {
-                            self.server_conn.send_if_authenticated(|| PanelMessage::ReceiveStats);
+                            self.server_conn
+                                .send_if_authenticated(|| PanelMessage::ReceiveStats);
                         }
 
                         EventType::SendLogs => {
-                            self.server_conn.send_if_authenticated(|| PanelMessage::ReceiveLogs);
+                            self.server_conn
+                                .send_if_authenticated(|| PanelMessage::ReceiveLogs);
                         }
 
                         e => todo!("{e:?}"),
@@ -237,7 +260,7 @@ impl WebsocketConnectionImpl {
                 }
 
                 Some(())
-            },
+            }
         }
     }
 }

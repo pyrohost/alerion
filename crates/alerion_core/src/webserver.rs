@@ -1,16 +1,14 @@
 use std::io;
 use std::net::SocketAddrV4;
 use std::sync::Arc;
-use actix_web::{HttpServer, App};
-use actix_web::middleware;
+
 use actix_web::http::header;
-use actix_web::web;
-use actix_web::guard;
-use actix_web::dev;
+use actix_web::{dev, guard, middleware, web, App, HttpServer};
+use serde::{Deserialize, Serialize};
+use utils::bearer_auth::BearerAuth;
+
 use crate::config::AlerionConfig;
 use crate::servers::ServerPool;
-use serde::{Serialize, Deserialize};
-use utils::bearer_auth::BearerAuth;
 
 const ALLOWED_HEADERS: &str = "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token";
 const ALLOWED_METHODS: &str = "GET, POST, PATCH, PUT, DELETE, OPTIONS";
@@ -67,24 +65,33 @@ impl Webserver {
                     use router::api;
 
                     web::scope("/api")
-                        .route("servers", web::post()
-                            .wrap(BearerAuth::new(token.clone()))
-                            .to(api::servers_post))
-                        .route("system", web::get()
-                            .wrap(BearerAuth::new(token.clone()))
-                            .to(api::system_get))
-                        .route("system", web::route()
-                            .guard(guard::Options())
-                            .to(api::system_options))
-                        .route("update", web::post()
-                            .wrap(BearerAuth::new(token.clone()))
-                            .to(api::update_post))
+                        .route(
+                            "servers",
+                            web::post()
+                                .wrap(BearerAuth::new(token.clone()))
+                                .to(api::servers_post),
+                        )
+                        .route(
+                            "system",
+                            web::get()
+                                .wrap(BearerAuth::new(token.clone()))
+                                .to(api::system_get),
+                        )
+                        .route(
+                            "system",
+                            web::route().guard(guard::Options()).to(api::system_options),
+                        )
+                        .route(
+                            "update",
+                            web::post()
+                                .wrap(BearerAuth::new(token.clone()))
+                                .to(api::update_post),
+                        )
                         .service(
                             web::scope("/servers/{id}")
-                                .route("ws", web::get().to(api::servers::ws))
+                                .route("ws", web::get().to(api::servers::ws)),
                         )
                 })
-
         });
 
         let ip = config.api.host;
@@ -108,5 +115,5 @@ impl Webserver {
     }
 }
 
-pub mod utils;
 pub mod router;
+pub mod utils;
