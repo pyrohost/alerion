@@ -64,14 +64,26 @@ pub enum EventType {
     Stats,
     #[serde(rename = "logs")]
     Logs,
-    #[serde(rename = "status")]
-    Status,
+    #[serde(rename = "console output")]
+    ConsoleOutput,
+    #[serde(rename = "install output")]
+    InstallOutput,
     #[serde(rename = "install completed")]
     InstallCompleted,
+    #[serde(rename = "status")]
+    Status,
     #[serde(rename = "send logs")]
     SendLogs,
     #[serde(rename = "send stats")]
     SendStats,
+    #[serde(rename = "send command")]
+    SendCommand,
+    #[serde(rename = "set state")]
+    SetState,
+    #[serde(rename = "daemon error")]
+    DaemonError,
+    #[serde(rename = "jwt error")]
+    JwtError,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
