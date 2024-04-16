@@ -2,12 +2,78 @@ use std::convert::Infallible;
 use actix_web_actors::ws;
 use actix::{Handler, StreamHandler, Actor, Addr, ActorContext};
 use uuid::Uuid;
+use bytestring::ByteString;
+use serde::{Serialize, Deserialize};
 use crate::config::AlerionConfig;
 use crate::websocket::message::PanelMessage;
 use super::message::ServerMessage;
-use super::serde_driver::{EventType, IncomingEvent, OutgoingEvent};
 use super::auth::Auth;
 use super::relay::ServerConnection;
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+pub enum EventType {
+    #[serde(rename = "auth")]
+    Authentication,
+    #[serde(rename = "auth success")]
+    AuthenticationSuccess,
+    #[serde(rename = "stats")]
+    Stats,
+    #[serde(rename = "logs")]
+    Logs,
+    #[serde(rename = "status")]
+    Status,
+    #[serde(rename = "install completed")]
+    InstallCompleted,
+    #[serde(rename = "send logs")]
+    SendLogs,
+    #[serde(rename = "send stats")]
+    SendStats,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Message {
+    event: EventType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    args: Option<serde_json::Value>,
+}
+
+impl actix::Message for Message {
+    type Result = Result<(), Infallible>;
+}
+
+impl From<Message> for ByteString {
+    fn from(value: Message) -> Self {
+        // there is no way this could fail, right
+        serde_json::to_string(&value).unwrap().into()
+    }
+}
+
+impl Message {
+    pub fn new_no_args(event: EventType) -> Self {
+        Self {
+            event,
+            args: None,
+        }
+    }
+
+    pub fn into_first_arg(self) -> Option<String> {
+        let mut args = self.args?;
+        let json_str = args.get_mut(0)?.take();
+        
+        match json_str {
+            serde_json::Value::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn event(&self) -> EventType {
+        self.event
+    }
+
+    pub fn into_args(self) -> Option<serde_json::Value> {
+        self.args
+    }
+}
 
 pub type ConnectionAddr = Addr<WebsocketConnectionImpl>;
 
@@ -62,13 +128,13 @@ impl WebsocketConnectionImpl {
 
     pub fn handle_text(&self, msg: &str, ctx: &mut <Self as Actor>::Context) -> Option<()> {
         // todo: behavior on bad JSON payload? right now just ignore
-        let event = IncomingEvent::try_parse(msg)?;
+        let event = serde_json::from_str::<Message>(msg).ok()?;
 
         match event.event() {
             EventType::Authentication => {
-                if self.auth.is_valid(&event.into_first_arg_as_str()?, &self.server_uuid) {
+                if self.auth.is_valid(&event.into_first_arg()?, &self.server_uuid) {
                     self.server_conn.set_authenticated();
-                    ctx.text(OutgoingEvent::new_no_args(EventType::AuthenticationSuccess));
+                    ctx.text(Message::new_no_args(EventType::AuthenticationSuccess));
                 }
 
                 Some(())

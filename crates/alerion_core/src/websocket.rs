@@ -46,4 +46,3 @@ pub mod relay;
 pub mod auth;
 pub mod conn;
 pub mod message;
-pub mod serde_driver;
