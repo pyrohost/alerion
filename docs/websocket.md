@@ -2,10 +2,10 @@
 
 Websockets messages all follow the following JSON schema:
 
-```json
+```jsonc
 {
-	"event": "event-type",
-	"args": [ "..." ]
+  "event": "event-type",
+  "args": [ "..." ]
 }
 ```
 
@@ -23,12 +23,12 @@ Websockets are authenticated through JWTs which contain a list of permissions re
 
 Provides a JWT used to authenticate the connection. Do not send or accept any messages prior to authenticating the connection. More information on websocket JWT authentication is available [here](websocket_auth.md).
 
-```json
+```jsonc
 {
-	"event": "auth",
-	"args": [
-		"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImp0aSI6ImI1Yjk1ZGNmNTg2YjhmNzg1ZWZkYzQ3ZWM4ZDc0NmNlIn0.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJhdWQiOlsiaHR0cDovL2xvY2FsaG9zdDo4MDgwIl0sImp0aSI6ImI1Yjk1ZGNmNTg2YjhmNzg1ZWZkYzQ3ZWM4ZDc0NmNlIiwiaWF0IjoxNzAwMDAwMDAwLCJuYmYiOjE3MDAwMDAwMDAsImV4cCI6MTcwMDAwMDYwMCwic2VydmVyX3V1aWQiOiIzZmQzZTEyOS0wZGMzLTRmMGUtOWEzNi02ODUyNmNhYmZiY2YiLCJwZXJtaXNzaW9ucyI6W10sInVzZXJfdXVpZCI6IjE5YTE3ZDM2LTM2YjMtNGFjNi05ZmJmLWQzYjcwOGFmMjA1NiIsInVzZXJfaWQiOjF9.JQnaXfZ0_T0mG8hvl0xiXLa6cw9OxcjbNLnWUwr63Ww"
-	]
+  "event": "auth",
+  "args": [
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImp0aSI6ImI1Yjk1ZGNmNTg2YjhmNzg1ZWZkYzQ3ZWM4ZDc0NmNlIn0.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJhdWQiOlsiaHR0cDovL2xvY2FsaG9zdDo4MDgwIl0sImp0aSI6ImI1Yjk1ZGNmNTg2YjhmNzg1ZWZkYzQ3ZWM4ZDc0NmNlIiwiaWF0IjoxNzAwMDAwMDAwLCJuYmYiOjE3MDAwMDAwMDAsImV4cCI6MTcwMDAwMDYwMCwic2VydmVyX3V1aWQiOiIzZmQzZTEyOS0wZGMzLTRmMGUtOWEzNi02ODUyNmNhYmZiY2YiLCJwZXJtaXNzaW9ucyI6W10sInVzZXJfdXVpZCI6IjE5YTE3ZDM2LTM2YjMtNGFjNi05ZmJmLWQzYjcwOGFmMjA1NiIsInVzZXJfaWQiOjF9.JQnaXfZ0_T0mG8hvl0xiXLa6cw9OxcjbNLnWUwr63Ww"
+  ]
 }
 ```
 
@@ -36,10 +36,10 @@ Provides a JWT used to authenticate the connection. Do not send or accept any me
 
 Signals to wings the client would like to receive stats. This request persists for the entirety of the connection.
 
-```json
+```jsonc
 {
-	"event": "send stats",
-    "args": []
+  "event": "send stats",
+  "args": []
 }
 ```
 
@@ -49,10 +49,10 @@ Signals to wings the client would like to receive logs. This request persists fo
 
 Restricted by the `control.console` permission.
 
-```json
+```jsonc
 {
-	"event": "send logs",
-	"args": []
+  "event": "send logs",
+  "args": []
 }
 ```
 
@@ -62,12 +62,12 @@ Tells wings to change the server's state. Available states are `start`, `stop`, 
 
 Restricted by the `control.{start/stop/restart}` permissions.
 
-```json
+```jsonc
 {
-	"event": "set state",
-	"args": [
-		"stop"
-	]
+  "event": "set state",
+  "args": [
+    "stop"
+  ]
 }
 ```
 
@@ -75,12 +75,12 @@ Restricted by the `control.{start/stop/restart}` permissions.
 
 Tell wings to execute the specified command.
 
-```json
+```jsonc
 {
-	"event": "send command",
-	"args": [
-		"help"
-	]
+  "event": "send command",
+  "args": [
+    "help"
+  ]
 }
 ```
 
@@ -90,10 +90,10 @@ Tell wings to execute the specified command.
 
 Notifies the client that its authentication attempt succeeded.
 
-```json
+```jsonc
 {
-	"event": "auth success"
-	"args": []
+  "event": "auth success"
+  "args": []
 }
 ```
 
@@ -103,12 +103,12 @@ Informs the client of the server's status. Typically sent right after authentica
 
 Available statuses are `offline`, `starting`, `running` and `stopping`.
 
-```json
+```jsonc
 {
-	"event": "status",
-	"args": [
-		"starting"
-	]
+  "event": "status",
+  "args": [
+    "starting"
+  ]
 }
 ```
 
@@ -118,29 +118,29 @@ Used to update the client about performance statistics and status of the server.
 
 The `args` array contains one string containing a serialized JSON object following this schema:
 
-```json
+```jsonc
 {
-	"memory_bytes": 1507557376, // RAM used
-	"memory_limit_bytes": 8041996288, // total RAM available
-	"cpu_absolute": 10.001, // CPU usage %
-	"network": {
-		"rx_bytes": 12220,
-		"tx_bytes": 3136
-	},
-	"uptime": 400000,
-	"state": "running", // status as defined in the `status` event
-	"disk_bytes": 115489609
+  "memory_bytes": 1507557376, // RAM used
+  "memory_limit_bytes": 8041996288, // total RAM available
+  "cpu_absolute": 10.001, // CPU usage %
+  "network": {
+    "rx_bytes": 12220,
+    "tx_bytes": 3136
+  },
+  "uptime": 400000,
+  "state": "running", // status as defined in the `status` event
+  "disk_bytes": 115489609
 }
 ```
 
 As such, the message will look like:
 
-```json
+```jsonc
 {
-	"event": "stats",
-	"args": [
-		"{ \"memory_bytes\": 1507557376, \"state\": \"running\", ... }"
-	]
+  "event": "stats",
+  "args": [
+    "{ \"memory_bytes\": 1507557376, \"state\": \"running\", ... }"
+  ]
 }
 ```
 
@@ -148,12 +148,12 @@ As such, the message will look like:
 
 Sends normal output lines to the client, which may contain terminal color codes.
 
-```json
+```jsonc
 {
-	"event": "console output",
-	"args": [
-		"\u001b[33m\u001b[1m[Pterodactyl Daemon]:\u001b[39m Finished pulling Docker container image\u001b[0m"
-	]
+  "event": "console output",
+  "args": [
+    "\u001b[33m\u001b[1m[Pterodactyl Daemon]:\u001b[39m Finished pulling Docker container image\u001b[0m"
+  ]
 }
 ```
 
@@ -167,12 +167,12 @@ Sends installation output to the client, which may contain terminal color codes.
 
 Restricted by the `admin.websocket.install` permission.
 
-```json
+```jsonc
 {
-	"event": "install output",
-	"args": [
-		"Status: Image is up to date for ghcr.io/pterodactyl/yolks:java_17"
-	]
+  "event": "install output",
+  "args": [
+    "Status: Image is up to date for ghcr.io/pterodactyl/yolks:java_17"
+  ]
 }
 ```
 
@@ -186,12 +186,12 @@ Notifies the client they did not provide correct credentials while attempting to
 
 Restricted by the `admin.websocket.errors` permission.  
 
-```json
+```jsonc
 {
-	"event": "jwt error",
-	"args": [
-		"Error message"
-	]
+  "event": "jwt error",
+  "args": [
+    "Error message"
+  ]
 }
 ```
 
@@ -199,12 +199,12 @@ Restricted by the `admin.websocket.errors` permission.
 
 Notifies the client an error the daemon has encountered an error. The error message will be a generic error message unless the client has the `admin.websocket.errors` permission.  
 
-```json
+```jsonc
 {
-	"event": "daemon error",
-	"args": [
-		"an unexpected error was encountered while handling this request"
-	]
+  "event": "daemon error",
+  "args": [
+    "an unexpected error was encountered while handling this request"
+  ]
 }
 ```
 
@@ -217,10 +217,10 @@ Do note the expiration deadline is checked only every 30 seconds, so this event 
 Clients should always try to reauthenticate as soon as they receive this event in order to avoid issues mentionned in [`token expired`](#token-expired).
 
 
-```json
+```jsonc
 {
-	"event": "token expiring",
-	"args": []
+  "event": "token expiring",
+  "args": []
 }
 ```
 
@@ -230,9 +230,9 @@ Sent to the client when the JWT has expired.
 
 From my observations, this event is only sent by a task which checks JWTs expiration times every 30 seconds. If the client sends a message, but the JWT has expired, wings will send either a `jwt error` if the client has `admin.websockets.error` permission, or a generic `daemon error` otherwise. Clients should therefore try to reauthenticate whenever they get an error, then resend the message.  
 
-```json
+```jsonc
 {
-	"event": "token expired",
-	"args": []
+  "event": "token expired",
+  "args": []
 }
 ```
