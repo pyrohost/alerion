@@ -19,4 +19,3 @@ pub fn start_websocket(
 pub mod relay;
 pub mod auth;
 pub mod conn;
-pub mod message;

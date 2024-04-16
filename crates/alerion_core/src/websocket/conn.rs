@@ -5,10 +5,40 @@ use uuid::Uuid;
 use bytestring::ByteString;
 use serde::{Serialize, Deserialize};
 use crate::config::AlerionConfig;
-use crate::websocket::message::PanelMessage;
-use super::message::ServerMessage;
 use super::auth::Auth;
 use super::relay::ServerConnection;
+
+macro_rules! impl_infallible_message {
+    ($msg_ty:ty) => {
+        impl actix::Message for $msg_ty {
+            type Result = std::result::Result<(), std::convert::Infallible>;
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ServerMessage {
+    Kill,
+}
+
+#[derive(Debug)]
+pub enum PanelMessage {
+    Command(String),
+    ReceiveLogs,
+    ReceiveStats,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RawMessage {
+    event: EventType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    args: Option<serde_json::Value>,
+}
+
+
+impl_infallible_message!(ServerMessage);
+impl_infallible_message!(PanelMessage);
+impl_infallible_message!(RawMessage);
 
 #[derive(Debug, Default)]
 struct Permissions {
@@ -86,25 +116,14 @@ pub enum EventType {
     JwtError,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Message {
-    event: EventType,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    args: Option<serde_json::Value>,
-}
-
-impl actix::Message for Message {
-    type Result = Result<(), Infallible>;
-}
-
-impl From<Message> for ByteString {
-    fn from(value: Message) -> Self {
+impl From<RawMessage> for ByteString {
+    fn from(value: RawMessage) -> Self {
         // there is no way this could fail, right
         serde_json::to_string(&value).unwrap().into()
     }
 }
 
-impl Message {
+impl RawMessage {
     pub fn new_no_args(event: EventType) -> Self {
         Self {
             event,
@@ -184,13 +203,13 @@ impl WebsocketConnectionImpl {
 
     pub fn handle_text(&self, msg: &str, ctx: &mut <Self as Actor>::Context) -> Option<()> {
         // todo: behavior on bad JSON payload? right now just ignore
-        let event = serde_json::from_str::<Message>(msg).ok()?;
+        let event = serde_json::from_str::<RawMessage>(msg).ok()?;
 
         match event.event() {
             EventType::Authentication => {
                 if self.auth.is_valid(&event.into_first_arg()?, &self.server_uuid) {
                     self.server_conn.set_authenticated();
-                    ctx.text(Message::new_no_args(EventType::AuthenticationSuccess));
+                    ctx.text(RawMessage::new_no_args(EventType::AuthenticationSuccess));
                 }
 
                 Some(())
@@ -199,19 +218,21 @@ impl WebsocketConnectionImpl {
             ty => {
                 if self.server_conn.is_authenticated() {
                     match ty {
-                        EventType::SendLogs => {
-                            println!("panel asked for logs...");
-
+                        EventType::SendCommand => {
                             self.server_conn.send_if_authenticated(|| {
                                 PanelMessage::Command("silly".to_owned())
-                            })
+                            });
                         }
 
                         EventType::SendStats => {
-                            println!("panel asked for starts");
+                            self.server_conn.send_if_authenticated(|| PanelMessage::ReceiveStats);
                         }
 
-                        _ => {}
+                        EventType::SendLogs => {
+                            self.server_conn.send_if_authenticated(|| PanelMessage::ReceiveLogs);
+                        }
+
+                        e => todo!("{e:?}"),
                     }
                 }
 

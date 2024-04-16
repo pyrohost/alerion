@@ -1,7 +1,7 @@
 use std::time::Instant;
 use std::collections::HashMap;
 use std::sync::{Arc, atomic::{Ordering, AtomicU32}};
-use crate::websocket::message::PanelMessage;
+use crate::websocket::conn::PanelMessage;
 use crate::websocket::relay::{ServerConnection, AuthTracker, ClientConnection};
 use crate::config::AlerionConfig;
 use uuid::Uuid;
