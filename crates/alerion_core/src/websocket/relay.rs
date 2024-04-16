@@ -1,6 +1,6 @@
 use std::sync::{Arc, atomic::{Ordering, AtomicBool, AtomicU64}};
 use tokio::sync::mpsc::Sender;
-use crate::websocket::message::{ServerMessage, PanelMessage};
+use crate::websocket::conn::{ServerMessage, PanelMessage};
 use crate::websocket::conn::ConnectionAddr;
 
 pub struct ServerConnection {
