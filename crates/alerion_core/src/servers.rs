@@ -4,6 +4,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use actix_web::HttpResponse;
+use alerion_datamodel::websocket::{PerformanceStatisics, NetworkStatistics, ServerStatus};
+use alerion_datamodel::remote::server::{ContainerConfig, ServerSettings};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -13,7 +15,7 @@ use thiserror::Error;
 use serde::{Serialize, Deserialize};
 
 use crate::config::AlerionConfig;
-use crate::websocket::conn::{ConnectionAddr, NetworkStatistics, PanelMessage, PerformanceStatisics, ServerMessage, ServerStatus};
+use crate::websocket::conn::{ConnectionAddr , PanelMessage, ServerMessage};
 use crate::websocket::relay::{AuthTracker, ClientConnection, ServerConnection};
 
 pub struct ServerPoolBuilder {
@@ -111,11 +113,11 @@ impl ServerPool {
 }
 
 pub struct ServerInfo {
-    container: remote::ContainerConfig,
+    container: ContainerConfig,
 }
 
 impl ServerInfo {
-    pub fn from_remote_info(server_settings: remote::ServerSettings) -> Self {
+    pub fn from_remote_info(server_settings: ServerSettings) -> Self {
         Self {
             container: server_settings.container,
         }

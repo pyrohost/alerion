@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use actix_web::http::header;
 use actix_web::{dev, guard, middleware, web, App, HttpServer};
-use serde::{Deserialize, Serialize};
+use alerion_datamodel::webserver::SystemOptions;
 use utils::bearer_auth::BearerAuth;
 
 use crate::config::AlerionConfig;
@@ -20,15 +20,6 @@ fn default_headers(config: &AlerionConfig) -> middleware::DefaultHeaders {
         .add((header::ACCESS_CONTROL_ALLOW_HEADERS, ALLOWED_HEADERS))
         .add((header::ACCESS_CONTROL_ALLOW_METHODS, ALLOWED_METHODS))
         .add((header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SystemOptions {
-    architecture: &'static str,
-    cpu_count: u32,
-    kernel_version: &'static str,
-    os: &'static str,
-    version: &'static str,
 }
 
 pub struct Webserver {
@@ -89,7 +80,7 @@ impl Webserver {
                         )
                         .service(
                             web::scope("/servers/{id}")
-                                .route("ws", web::get().to(api::servers::ws)),
+                                .route("ws", web::get().to(api::ws)),
                         )
                 })
         });
@@ -97,10 +88,6 @@ impl Webserver {
         let ip = config.api.host;
         let port = config.api.port;
 
-        // only set a low amount of workers, because the webserver
-        // isn't gonna handle a ton of requests and we want alerion
-        // as a whole to use as little resources as possible, to
-        // leave room for the actual servers.
         let server_fut = http_server
             .worker_max_blocking_threads(16)
             .workers(1)
