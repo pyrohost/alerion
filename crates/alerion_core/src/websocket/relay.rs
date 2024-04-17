@@ -57,6 +57,16 @@ impl ClientConnection {
         }
     }
 
+    pub fn send_if_authenticated<F>(&self, msg: F)
+    where
+        F: FnOnce() -> ServerMessage
+    {
+        if self.auth_tracker.get_auth() {
+            let m = msg();
+            self.ws_sender.do_send(m);
+        }
+    }
+
     /// Terminate the connection on the server's side.  
     ///
     /// There could be a condition where the server tries to terminate the connection,

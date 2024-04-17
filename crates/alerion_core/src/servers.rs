@@ -5,11 +5,11 @@ use std::time::Instant;
 
 use actix_web::HttpResponse;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::config::AlerionConfig;
-use crate::websocket::conn::{ConnectionAddr, PanelMessage};
+use crate::websocket::conn::{ConnectionAddr, NetworkStatistics, PanelMessage, PerformanceStatisics, ServerMessage, ServerStatus};
 use crate::websocket::relay::{AuthTracker, ClientConnection, ServerConnection};
 
 pub struct ServerPoolBuilder {
@@ -19,7 +19,6 @@ pub struct ServerPoolBuilder {
 
 impl ServerPoolBuilder {
     pub fn from_config(config: &AlerionConfig) -> Self {
-
         Self {
             servers: HashMap::new(),
             remote_api: Arc::new(remote::RemoteClient::new(config)),
@@ -37,7 +36,7 @@ impl ServerPoolBuilder {
             let uuid = s.uuid;
             let info = ServerInfo::from_remote_info(s.settings);
             let server = Server::new(uuid, info, Arc::clone(&self.remote_api));
-            self.servers.insert(uuid, Arc::new(server));
+            self.servers.insert(uuid, server);
         }
 
         Ok(self)
@@ -85,7 +84,7 @@ impl ServerPool {
 
         let server_info = ServerInfo::from_remote_info(config.settings);
 
-        let server = Arc::new(Server::new(uuid, server_info, remote_api));
+        let server = Server::new(uuid, server_info, remote_api);
         self.servers.write().await.insert(uuid, Arc::clone(&server));
 
         Ok(server)
@@ -113,28 +112,31 @@ pub struct Server {
     uuid: Uuid,
     container_id: String,
     websocket_id_counter: AtomicU32,
-    websockets: Mutex<HashMap<u32, ClientConnection>>,
+    websockets: RwLock<HashMap<u32, ClientConnection>>,
     sender_copy: Sender<(u32, PanelMessage)>,
     server_info: ServerInfo,
     remote_api: Arc<remote::RemoteClient>,
 }
 
 impl Server {
-    pub fn new(uuid: Uuid, server_info: ServerInfo, remote_api: Arc<remote::RemoteClient>) -> Self {
+    pub fn new(uuid: Uuid, server_info: ServerInfo, remote_api: Arc<remote::RemoteClient>) -> Arc<Self> {
         let (send, recv) = channel(128);
 
-        tokio::spawn(task_websocket_receiver(recv));
-
-        Self {
+        let server = Arc::new(Self {
             start_time: Instant::now(),
             uuid,
             container_id: format!("{}_container", uuid.as_hyphenated()),
             websocket_id_counter: AtomicU32::new(0),
-            websockets: Mutex::new(HashMap::new()),
+            websockets: RwLock::new(HashMap::new()),
             sender_copy: send,
             server_info,
             remote_api,
-        }
+        });
+
+        tokio::spawn(task_websocket_receiver(recv));
+        tokio::spawn(monitor_performance_metrics(Arc::clone(&server)));
+
+        server
     }
 
     pub async fn setup_new_websocket<F>(&self, start_websocket: F) -> actix_web::Result<HttpResponse>
@@ -153,15 +155,44 @@ impl Server {
 
         // add the obtained reply channel to the list of websocket connections
         let client_conn = ClientConnection::new(auth_tracker, addr);
-        let mut websockets = self.websockets.lock().await;
+        let mut websockets = self.websockets.write().await;
         websockets.insert(id, client_conn);
 
         // give back the HTTP 101 response
         Ok(response)
     }
 
+    pub async fn send_to_available_websockets(&self, msg: ServerMessage) {
+        let lock = self.websockets.read().await;
+
+        for sender in lock.values() {
+            sender.send_if_authenticated(|| msg.clone());
+        }
+    }
+
     pub fn server_time(&self) -> u64 {
         self.start_time.elapsed().as_millis() as u64
+    }
+}
+
+async fn monitor_performance_metrics(server: Arc<Server>) {
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let stats = PerformanceStatisics {
+            memory_bytes: server.server_time() as usize,
+            memory_limit_bytes: 1024usize.pow(3) * 8,
+            cpu_absolute: 50.11,
+            network: NetworkStatistics {
+                rx_bytes: 1024,
+                tx_bytes: 800,
+            },
+            uptime: 5000 + server.server_time(),
+            state: ServerStatus::Running,
+            disk_bytes: 100,
+        };
+
+        server.send_to_available_websockets(ServerMessage::Stats(stats)).await;
     }
 }
 
