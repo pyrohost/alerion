@@ -1,5 +1,5 @@
 use std::io;
-use std::net::{SocketAddr, SocketAddrV4};
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use actix_web::http::header;

@@ -91,7 +91,7 @@ impl ServerPool {
     }
 
     pub async fn get_server(&self, uuid: Uuid) -> Option<Arc<Server>> {
-        self.servers.read().await.get(&uuid).map(Arc::clone)
+        self.servers.read().await.get(&uuid).cloned()
     }
 }
 
@@ -161,12 +161,8 @@ impl Server {
 
 async fn task_websocket_receiver(mut receiver: Receiver<PanelMessage>) {
     loop {
-        match receiver.recv().await {
-            Some(msg) => {
-                println!("{:?}", msg)
-            }
-
-            None => {}
+        if let Some(msg) = receiver.recv().await {
+            log::debug!("Server received websocket message: {msg:?}");
         }
     }
 }

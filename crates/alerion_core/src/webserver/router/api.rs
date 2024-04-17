@@ -17,9 +17,10 @@ pub async fn servers_post(
     opts: web::Json<CreateServer>,
     server_pool: web::Data<Arc<ServerPool>>,
 ) -> impl Responder {
-    server_pool.create_server(opts.uuid).await;
-
-    HttpResponse::Accepted()
+    match server_pool.create_server(opts.uuid).await {
+        Ok(_) => HttpResponse::Accepted(),
+        Err(_) => HttpResponse::InternalServerError(),
+    }
 }
 
 pub async fn system_options() -> impl Responder {

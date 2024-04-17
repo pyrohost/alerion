@@ -259,7 +259,7 @@ impl RemoteClient {
                 let bytes = resp.bytes().await?;
 
                 serde_json::from_slice::<RemoteServerInstallationResponse>(&bytes)
-                    .map_err(|json_e| ResponseError::InvalidJson(json_e))
+                    .map_err(ResponseError::InvalidJson)
             }
 
             _ => Err(ResponseError::Unknown(resp.status())),
@@ -287,7 +287,7 @@ impl RemoteClient {
                 let bytes = resp.bytes().await?;
 
                 serde_json::from_slice::<RemoteSingleServerResponse>(&bytes)
-                    .map_err(|json_e| ResponseError::InvalidJson(json_e))
+                    .map_err(ResponseError::InvalidJson)
             }
 
             _ => Err(ResponseError::Unknown(resp.status())),
@@ -315,7 +315,7 @@ impl RemoteClient {
                     let bytes = resp.bytes().await?;
 
                     serde_json::from_slice::<RemoteServersResponse>(&bytes)
-                        .map_err(|json_e| ResponseError::InvalidJson(json_e))
+                        .map_err(ResponseError::InvalidJson)
                 }
 
                 _ => {
