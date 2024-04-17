@@ -1,19 +1,23 @@
 use std::sync::Arc;
 
-use config::ConfigFile;
+use config::AlerionConfig;
 use futures::stream::{FuturesUnordered, StreamExt};
 use servers::ServerPool;
 use webserver::Webserver;
 
 /// Alerion main entrypoint. Expects a tokio runtime to be setup.
 pub async fn alerion_main() -> anyhow::Result<()> {
-    // we need to:
-    // - read config/start watch
-    // - create webserver
-    // - other stuff :33
+    logging::splash();
+    logging::setup();
 
-    let config_file = ConfigFile::open_default().await?;
-    let config = config_file.config();
+    log::info!("Starting Alerion");
+    let config = match AlerionConfig::load() {
+        Ok(config) => config,
+        Err(e) => {
+            log::error!("Failed to load config: {}", e);
+            return Err(e);
+        }
+    };
 
     let server_pool = Arc::new(ServerPool::builder(&config).build());
 
@@ -42,6 +46,7 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 }
 
 pub mod config;
+pub mod logging;
 pub mod servers;
 pub mod webserver;
 pub mod websocket;

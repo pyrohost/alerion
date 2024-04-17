@@ -1,15 +1,15 @@
 use std::collections::HashMap;
-use std::net::Ipv4Addr;
 use std::mem;
+use std::net::Ipv4Addr;
 
-use reqwest::StatusCode;
 use reqwest::header::{self, HeaderMap};
-use uuid::Uuid;
-use serde::{Serialize, Deserialize};
+use reqwest::StatusCode;
 use serde::de::IgnoredAny;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use smallvec::SmallVec;
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::config::AlerionConfig;
 
@@ -187,22 +187,16 @@ pub struct RemoteClient {
 
 impl RemoteClient {
     pub fn new(config: &AlerionConfig) -> Self {
-        let token_id = &config.token_id;
-        let token = &config.token;
+        let token_id = &config.auth.token_id;
+        let token = &config.auth.token;
 
         let mut headers = HeaderMap::new();
         headers.insert(
             header::AUTHORIZATION,
             format!("Bearer {token_id}.{token}").parse().unwrap(),
         );
-        headers.insert(
-            header::CONTENT_TYPE,
-            "application/json".parse().unwrap(),
-        );
-        headers.insert(
-            header::ACCEPT,
-            "application/json".parse().unwrap(),
-        );
+        headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+        headers.insert(header::ACCEPT, "application/json".parse().unwrap());
 
         Self {
             remote: config.remote.clone(),
@@ -210,7 +204,7 @@ impl RemoteClient {
                 .user_agent("alerion/0.1.0")
                 .default_headers(headers)
                 .build()
-                .unwrap()
+                .unwrap(),
         }
     }
 
@@ -225,8 +219,13 @@ impl RemoteClient {
             reinstall,
         };
 
-        let resp = self.http
-            .post(format!("{}/api/remote/servers/{}/install", self.remote, uuid.as_hyphenated()))
+        let resp = self
+            .http
+            .post(format!(
+                "{}/api/remote/servers/{}/install",
+                self.remote,
+                uuid.as_hyphenated()
+            ))
             .body(serde_json::to_string(&req).unwrap())
             .send()
             .await?;
@@ -242,8 +241,13 @@ impl RemoteClient {
         &self,
         uuid: Uuid,
     ) -> Result<RemoteServerInstallationResponse, ResponseError> {
-        let resp = self.http
-            .get(format!("{}/api/remote/servers/{}/install", self.remote, uuid.as_hyphenated()))
+        let resp = self
+            .http
+            .get(format!(
+                "{}/api/remote/servers/{}/install",
+                self.remote,
+                uuid.as_hyphenated()
+            ))
             .send()
             .await?;
 
@@ -261,9 +265,17 @@ impl RemoteClient {
         }
     }
 
-    pub async fn get_server_configuration(&self, uuid: Uuid) -> Result<RemoteSingleServerResponse, ResponseError> {
-        let resp = self.http
-            .get(format!("{}/api/remote/servers/{}", self.remote, uuid.as_hyphenated()))
+    pub async fn get_server_configuration(
+        &self,
+        uuid: Uuid,
+    ) -> Result<RemoteSingleServerResponse, ResponseError> {
+        let resp = self
+            .http
+            .get(format!(
+                "{}/api/remote/servers/{}",
+                self.remote,
+                uuid.as_hyphenated()
+            ))
             .send()
             .await?;
 
@@ -286,8 +298,12 @@ impl RemoteClient {
         let mut page = 1;
 
         loop {
-            let resp = self.http
-                .get(format!("{}/api/remote/servers?page={}&per_page=10", self.remote, page))
+            let resp = self
+                .http
+                .get(format!(
+                    "{}/api/remote/servers?page={}&per_page=10",
+                    self.remote, page
+                ))
                 .send()
                 .await?;
 

@@ -40,7 +40,7 @@ impl Auth {
         validation.iss = Some(HashSet::from([cfg.remote.clone()]));
         validation.sub = None;
 
-        let key = DecodingKey::from_secret(cfg.token.as_ref());
+        let key = DecodingKey::from_secret(cfg.auth.token.as_ref());
 
         Self { validation, key }
     }

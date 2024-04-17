@@ -1,5 +1,5 @@
 use std::io;
-use std::net::SocketAddrV4;
+use std::net::{SocketAddr, SocketAddrV4};
 use std::sync::Arc;
 
 use actix_web::http::header;
@@ -43,7 +43,7 @@ impl Webserver {
 
         let http_server = HttpServer::new(move || {
             let config = moved_out_config.clone();
-            let token = &config.token;
+            let token = &config.auth.token;
 
             let base_system_options = SystemOptions {
                 architecture: "amd64",
@@ -104,7 +104,7 @@ impl Webserver {
         let server_fut = http_server
             .worker_max_blocking_threads(16)
             .workers(1)
-            .bind(SocketAddrV4::new(ip, port))?
+            .bind(SocketAddr::new(ip, port))?
             .run();
 
         Ok(Webserver { server_fut })

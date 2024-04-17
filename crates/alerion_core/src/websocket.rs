@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::config::AlerionConfig;
 
+
 pub fn start_websocket(
     server_uuid: Uuid,
     config: &AlerionConfig,

@@ -6,9 +6,10 @@ use bytestring::ByteString;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::config::AlerionConfig;
+
 use super::auth::Auth;
 use super::relay::ServerConnection;
-use crate::config::AlerionConfig;
 
 macro_rules! impl_infallible_message {
     ($msg_ty:ty) => {
