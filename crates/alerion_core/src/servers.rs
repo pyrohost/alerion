@@ -3,12 +3,13 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+use actix_web::HttpResponse;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::config::AlerionConfig;
-use crate::websocket::conn::PanelMessage;
+use crate::websocket::conn::{ConnectionAddr, PanelMessage};
 use crate::websocket::relay::{AuthTracker, ClientConnection, ServerConnection};
 
 pub struct ServerPoolBuilder {
@@ -113,7 +114,7 @@ pub struct Server {
     container_id: String,
     websocket_id_counter: AtomicU32,
     websockets: Mutex<HashMap<u32, ClientConnection>>,
-    sender_copy: Sender<PanelMessage>,
+    sender_copy: Sender<(u32, PanelMessage)>,
     server_info: ServerInfo,
     remote_api: Arc<remote::RemoteClient>,
 }
@@ -136,22 +137,27 @@ impl Server {
         }
     }
 
-
-    pub async fn add_websocket(&self, conn: ClientConnection) {
+    pub async fn setup_new_websocket<F>(&self, start_websocket: F) -> actix_web::Result<HttpResponse>
+    where
+        F: FnOnce(ServerConnection) -> actix_web::Result<(ConnectionAddr, HttpResponse)>,
+    {
         let id = self.websocket_id_counter.fetch_add(1, Ordering::SeqCst);
-        let mut websockets = self.websockets.lock().await;
-        websockets.insert(id, conn);
-    }
 
-    pub fn new_connection_with_auth_tracker(&self) -> (ServerConnection, Arc<AuthTracker>) {
+        // setup the request channel for the websocket
         let auth_tracker = Arc::new(AuthTracker::new(self.server_time()));
-        let auth_tracker_clone = Arc::clone(&auth_tracker);
         let sender = self.sender_copy.clone();
+        let server_conn = ServerConnection::new(Arc::clone(&auth_tracker), sender, id);
 
-        (
-            ServerConnection::new(auth_tracker, sender),
-            auth_tracker_clone,
-        )
+        // setup a websocket connection through the user-provided closure
+        let (addr, response) = start_websocket(server_conn)?;
+
+        // add the obtained reply channel to the list of websocket connections
+        let client_conn = ClientConnection::new(auth_tracker, addr);
+        let mut websockets = self.websockets.lock().await;
+        websockets.insert(id, client_conn);
+
+        // give back the HTTP 101 response
+        Ok(response)
     }
 
     pub fn server_time(&self) -> u64 {
@@ -159,7 +165,7 @@ impl Server {
     }
 }
 
-async fn task_websocket_receiver(mut receiver: Receiver<PanelMessage>) {
+async fn task_websocket_receiver(mut receiver: Receiver<(u32, PanelMessage)>) {
     loop {
         if let Some(msg) = receiver.recv().await {
             log::debug!("Server received websocket message: {msg:?}");

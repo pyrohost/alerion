@@ -7,14 +7,16 @@ use crate::websocket::conn::{ConnectionAddr, PanelMessage, ServerMessage};
 
 pub struct ServerConnection {
     auth_tracker: Arc<AuthTracker>,
-    sender: Sender<PanelMessage>,
+    sender: Sender<(u32, PanelMessage)>,
+    id: u32,
 }
 
 impl ServerConnection {
-    pub fn new(auth_tracker: Arc<AuthTracker>, sender: Sender<PanelMessage>) -> Self {
+    pub fn new(auth_tracker: Arc<AuthTracker>, sender: Sender<(u32, PanelMessage)>, id: u32) -> Self {
         ServerConnection {
             auth_tracker,
             sender,
+            id,
         }
     }
 
@@ -33,8 +35,12 @@ impl ServerConnection {
     {
         if self.auth_tracker.get_auth() {
             let value = msg();
-            let _ = self.sender.try_send(value);
+            let _ = self.sender.try_send((self.id, value));
         }
+    }
+
+    pub fn auth_tracker(&self) -> Arc<AuthTracker> {
+        Arc::clone(&self.auth_tracker)
     }
 }
 

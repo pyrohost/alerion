@@ -5,7 +5,6 @@ use uuid::Uuid;
 
 use crate::config::AlerionConfig;
 use crate::servers::ServerPool;
-use crate::websocket::relay::ClientConnection;
 
 pub async fn ws(
     req: HttpRequest,
@@ -19,14 +18,11 @@ pub async fn ws(
 
     if let Some(server) = server_pool.get_server(uuid).await {
         // if the server doesn't exist well we'll see
-        let (conn, auth_tracker) = server.new_connection_with_auth_tracker();
-        let (addr, resp) = crate::websocket::start_websocket(uuid, &config, conn, &req, payload)?;
+        let fut = server.setup_new_websocket(|conn| {
+            crate::websocket::start_websocket(uuid, &config, conn, &req, payload)
+        });
 
-        server
-            .add_websocket(ClientConnection::new(auth_tracker, addr))
-            .await;
-
-        Ok(resp)
+        fut.await
     } else {
         Ok(HttpResponse::NotImplemented().into())
     }

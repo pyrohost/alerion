@@ -326,6 +326,9 @@ impl RemoteClient {
             };
 
             let mut parsed = parsed?;
+
+            log::debug!("{parsed:#?}");
+
             let server_data = mem::take(&mut parsed.data);
 
             servers = Some(match servers {
