@@ -1,3 +1,10 @@
+pub mod config;
+pub mod filesystem;
+pub mod logging;
+pub mod servers;
+pub mod webserver;
+pub mod websocket;
+
 use std::sync::Arc;
 
 use config::AlerionConfig;
@@ -5,19 +12,17 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use servers::ServerPool;
 use webserver::Webserver;
 
+use crate::filesystem::setup_directories;
+
 /// Alerion main entrypoint. Expects a tokio runtime to be setup.
 pub async fn alerion_main() -> anyhow::Result<()> {
     logging::splash();
     logging::setup();
 
     log::info!("Starting Alerion");
-    let config = match AlerionConfig::load() {
-        Ok(config) => config,
-        Err(e) => {
-            log::error!("Failed to load config: {}", e);
-            return Err(e);
-        }
-    };
+
+    let project_dirs = setup_directories().await?;
+    let config = AlerionConfig::load(&project_dirs)?;
 
     let server_pool = Arc::new(ServerPool::builder(&config).build());
 
@@ -44,9 +49,3 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     Ok(())
 }
-
-pub mod config;
-pub mod logging;
-pub mod servers;
-pub mod webserver;
-pub mod websocket;
