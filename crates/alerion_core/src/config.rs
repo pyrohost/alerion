@@ -265,27 +265,32 @@ impl From<wings::Config> for AlerionConfig {
 }
 
 impl AlerionConfig {
-    pub fn load() -> anyhow::Result<Self> {
-        let config = directories::ProjectDirs::from("host", "pyro", "alerion")
-            .ok_or_else(|| anyhow::anyhow!("Could not find project directories"))?
-            .config_dir()
-            .join("config.json");
+    pub fn load(project_dirs: &directories::ProjectDirs) -> anyhow::Result<Self> {
+        let config_path = project_dirs.config_dir().join("config.json");
+        let config = std::fs::read_to_string(&config_path).map_err(|e| {
+            anyhow::anyhow!(
+                "Could not read Alerion config from {}: {}",
+                config_path.display(),
+                e
+            )
+        })?;
 
-        let config = std::fs::read_to_string(config)?;
-        let config: wings::Config = serde_json::from_str(&config)?;
-
-        Ok(config.into())
+        let config: AlerionConfig = serde_json::from_str(&config)?;
+        Ok(config)
     }
 
-    pub fn save(&self) -> anyhow::Result<()> {
-        let config = directories::ProjectDirs::from("host", "pyro", "alerion")
-            .ok_or_else(|| anyhow::anyhow!("Could not find project directories"))?
-            .config_dir()
-            .join("config.json");
+    pub fn save(&self, project_dirs: &directories::ProjectDirs) -> anyhow::Result<()> {
+        let config_path = project_dirs.config_dir().join("config.json");
+        let config = serde_json::to_string_pretty(self)?;
 
-        let config_data = serde_json::to_string_pretty(self)?;
-        std::fs::write(config, config_data)?;
-        
+        std::fs::write(&config_path, config).map_err(|e| {
+            anyhow::anyhow!(
+                "Could not write Alerion config to {}: {}",
+                config_path.display(),
+                e
+            )
+        })?;
+
         Ok(())
     }
 
