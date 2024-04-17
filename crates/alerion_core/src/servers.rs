@@ -26,9 +26,13 @@ impl ServerPoolBuilder {
     }
 
     pub async fn fetch_servers(mut self) -> Result<ServerPoolBuilder, remote::ResponseError> {
+        log::info!("Fetching existing servers on this node");
+
         let servers = self.remote_api.get_servers().await?;
 
         for s in servers {
+            log::info!("Adding server {}", s.uuid);
+
             let uuid = s.uuid;
             let info = ServerInfo::from_remote_info(s.settings);
             let server = Server::new(uuid, info, Arc::clone(&self.remote_api));
@@ -72,6 +76,8 @@ impl ServerPool {
     }
 
     pub async fn create_server(&self, uuid: Uuid) -> Result<Arc<Server>, remote::ResponseError> {
+        log::info!("Creating server {uuid}");
+
         let remote_api = Arc::clone(&self.remote_api);
 
         let config = remote_api.get_server_configuration(uuid).await?;
