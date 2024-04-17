@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::mem;
-use std::net::Ipv4Addr;
 
 use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
@@ -70,7 +69,7 @@ pub struct Mount {
 
 #[derive(Debug, Deserialize)]
 pub struct Allocation {
-    pub ip: Ipv4Addr,
+    pub ip: String,
     pub port: u16,
 }
 
@@ -78,7 +77,7 @@ pub struct Allocation {
 pub struct AllocationConfig {
     pub force_outgoing_ip: bool,
     pub default: Allocation,
-    pub mappings: HashMap<Ipv4Addr, SmallVec<[u16; 2]>>,
+    pub mappings: HashMap<String, SmallVec<[u16; 2]>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -175,8 +174,8 @@ pub enum ResponseError {
     InvalidJson(serde_json::Error),
     #[error("failed to authenticate")]
     Unauthorized,
-    #[error("unknown error")]
-    Unknown,
+    #[error("unknown error (status: {0})")]
+    Unknown(StatusCode),
 }
 
 /// A wrapper around the simple pyrodactyl remote API
@@ -195,8 +194,10 @@ impl RemoteClient {
             header::AUTHORIZATION,
             format!("Bearer {token_id}.{token}").parse().unwrap(),
         );
-        headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
-        headers.insert(header::ACCEPT, "application/json".parse().unwrap());
+        //headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+        headers.insert(header::ACCEPT, "application/vnd.pterodactyl.v1+json".parse().unwrap());
+
+        log::info!("{}", config.remote);
 
         Self {
             remote: config.remote.clone(),
@@ -219,13 +220,13 @@ impl RemoteClient {
             reinstall,
         };
 
+        let url = format!("{}/api/remote/servers/{}/install", self.remote, uuid.as_hyphenated());
+
+        log::debug!("remote: POST {url}");
+
         let resp = self
             .http
-            .post(format!(
-                "{}/api/remote/servers/{}/install",
-                self.remote,
-                uuid.as_hyphenated()
-            ))
+            .post(url)
             .body(serde_json::to_string(&req).unwrap())
             .send()
             .await?;
@@ -241,13 +242,13 @@ impl RemoteClient {
         &self,
         uuid: Uuid,
     ) -> Result<RemoteServerInstallationResponse, ResponseError> {
+        let url = format!("{}/api/remote/servers/{}/install", self.remote, uuid.as_hyphenated());
+        
+        log::debug!("remote: GET {url}");
+
         let resp = self
             .http
-            .get(format!(
-                "{}/api/remote/servers/{}/install",
-                self.remote,
-                uuid.as_hyphenated()
-            ))
+            .get(url)
             .send()
             .await?;
 
@@ -261,7 +262,7 @@ impl RemoteClient {
                     .map_err(|json_e| ResponseError::InvalidJson(json_e))
             }
 
-            _ => Err(ResponseError::Unknown),
+            _ => Err(ResponseError::Unknown(resp.status())),
         }
     }
 
@@ -269,13 +270,13 @@ impl RemoteClient {
         &self,
         uuid: Uuid,
     ) -> Result<RemoteSingleServerResponse, ResponseError> {
+        let url = format!("{}/api/remote/servers/{}", self.remote, uuid.as_hyphenated());
+
+        log::debug!("remote: GET {url}");
+
         let resp = self
             .http
-            .get(format!(
-                "{}/api/remote/servers/{}",
-                self.remote,
-                uuid.as_hyphenated()
-            ))
+            .get(url)
             .send()
             .await?;
 
@@ -289,7 +290,7 @@ impl RemoteClient {
                     .map_err(|json_e| ResponseError::InvalidJson(json_e))
             }
 
-            _ => Err(ResponseError::Unknown),
+            _ => Err(ResponseError::Unknown(resp.status())),
         }
     }
 
@@ -298,12 +299,13 @@ impl RemoteClient {
         let mut page = 1;
 
         loop {
+            let url = format!("{}/api/remote/servers?page={}&per_page=2", self.remote, page);
+
+            log::debug!("remote: GET {url}");
+
             let resp = self
                 .http
-                .get(format!(
-                    "{}/api/remote/servers?page={}&per_page=10",
-                    self.remote, page
-                ))
+                .get(url)
                 .send()
                 .await?;
 
@@ -316,7 +318,11 @@ impl RemoteClient {
                         .map_err(|json_e| ResponseError::InvalidJson(json_e))
                 }
 
-                _ => Err(ResponseError::Unknown),
+                _ => {
+                    let status = resp.status();
+                    //log::debug!("{}", resp.text().await.unwrap());
+                    Err(ResponseError::Unknown(status))
+                }
             };
 
             let mut parsed = parsed?;
