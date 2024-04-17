@@ -1,168 +1,18 @@
-use std::collections::HashMap;
 use std::mem;
 
+use alerion_datamodel::remote::server::{
+    PostServerInstallByUuidRequest,
+    GetServerInstallByUuidResponse,
+    GetServerByUuidResponse,
+    GetServersResponse,
+    ServerData,
+};
 use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
-use serde::de::IgnoredAny;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use smallvec::SmallVec;
 use thiserror::Error;
 use uuid::Uuid;
 
 use crate::config::AlerionConfig;
-
-#[derive(Debug, Deserialize)]
-pub struct SearchReplaceMatcher {
-    #[serde(rename = "match")]
-    pub match_item: String,
-    pub replace_with: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct FileParser {
-    pub parser: String,
-    pub file: String,
-    pub replace: Vec<SearchReplaceMatcher>,
-}
-
-#[derive(Debug, Deserialize)]
-pub enum StopSignalType {
-    #[serde(rename = "command")]
-    Command,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct StopConfig {
-    #[serde(rename = "type")]
-    pub kind: StopSignalType,
-    pub value: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct StartupConfig {
-    pub done: Vec<String>,
-    pub user_interaction: Vec<Value>,
-    pub strip_ansi: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ProcessConfig {
-    pub startup: StartupConfig,
-    pub stop: StopConfig,
-    pub configs: SmallVec<[FileParser; 1]>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Egg {
-    pub id: Uuid,
-    // todo: figure out what is inside this array
-    pub file_denylist: Vec<Value>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Mount {
-    pub source: String,
-    pub target: String,
-    pub read_only: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Allocation {
-    pub ip: String,
-    pub port: u16,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AllocationConfig {
-    pub force_outgoing_ip: bool,
-    pub default: Allocation,
-    pub mappings: HashMap<String, SmallVec<[u16; 2]>>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ContainerConfig {
-    pub image: String,
-    pub oom_disabled: bool,
-    pub requires_rebuild: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct BuildConfig {
-    pub memory_limit: isize,
-    pub swap: isize,
-    pub io_weight: u32,
-    pub cpu_limit: u32,
-    pub threads: Option<String>,
-    pub disk_space: usize,
-    pub oom_disabled: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ServerMeta {
-    pub name: String,
-    pub description: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ServerSettings {
-    pub uuid: Uuid,
-    pub meta: IgnoredAny,
-    pub suspended: bool,
-    pub environment: HashMap<String, Value>,
-    pub invocation: String,
-    pub skip_egg_scripts: bool,
-    pub build: BuildConfig,
-    pub container: ContainerConfig,
-    pub allocations: AllocationConfig,
-    pub mounts: Vec<Mount>,
-    pub egg: Egg,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ServerData {
-    pub uuid: Uuid,
-    pub settings: ServerSettings,
-    pub process_configuration: ProcessConfig,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RemoteServersMeta {
-    pub current_page: usize,
-    pub from: usize,
-    pub last_page: usize,
-    pub links: IgnoredAny,
-    pub path: IgnoredAny,
-    pub per_page: usize,
-    pub to: usize,
-    pub total: usize,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RemoteServersResponse {
-    pub data: Vec<ServerData>,
-    pub links: IgnoredAny,
-    pub meta: RemoteServersMeta,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RemoteSingleServerResponse {
-    pub settings: ServerSettings,
-    pub process_configuration: ProcessConfig,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RemoteServerInstallationResponse {
-    pub container_image: String,
-    pub entrypoint: String,
-    pub script: String,
-}
-
-#[derive(Debug, Serialize)]
-struct UpdateServerInstallStatusRequest {
-    pub successful: bool,
-    pub reinstall: bool,
-}
 
 #[derive(Debug, Error)]
 pub enum ResponseError {
@@ -215,7 +65,7 @@ impl RemoteClient {
         successful: bool,
         reinstall: bool,
     ) -> Result<(), ResponseError> {
-        let req = UpdateServerInstallStatusRequest {
+        let req = PostServerInstallByUuidRequest {
             successful,
             reinstall,
         };
@@ -241,7 +91,7 @@ impl RemoteClient {
     pub async fn get_install_instructions(
         &self,
         uuid: Uuid,
-    ) -> Result<RemoteServerInstallationResponse, ResponseError> {
+    ) -> Result<GetServerInstallByUuidResponse, ResponseError> {
         let url = format!("{}/api/remote/servers/{}/install", self.remote, uuid.as_hyphenated());
         
         log::debug!("remote: GET {url}");
@@ -258,7 +108,7 @@ impl RemoteClient {
             StatusCode::OK => {
                 let bytes = resp.bytes().await?;
 
-                serde_json::from_slice::<RemoteServerInstallationResponse>(&bytes)
+                serde_json::from_slice::<GetServerInstallByUuidResponse>(&bytes)
                     .map_err(ResponseError::InvalidJson)
             }
 
@@ -269,7 +119,7 @@ impl RemoteClient {
     pub async fn get_server_configuration(
         &self,
         uuid: Uuid,
-    ) -> Result<RemoteSingleServerResponse, ResponseError> {
+    ) -> Result<GetServerByUuidResponse, ResponseError> {
         let url = format!("{}/api/remote/servers/{}", self.remote, uuid.as_hyphenated());
 
         log::debug!("remote: GET {url}");
@@ -286,7 +136,7 @@ impl RemoteClient {
             StatusCode::OK => {
                 let bytes = resp.bytes().await?;
 
-                serde_json::from_slice::<RemoteSingleServerResponse>(&bytes)
+                serde_json::from_slice::<GetServerByUuidResponse>(&bytes)
                     .map_err(ResponseError::InvalidJson)
             }
 
@@ -314,7 +164,7 @@ impl RemoteClient {
                 StatusCode::OK => {
                     let bytes = resp.bytes().await?;
 
-                    serde_json::from_slice::<RemoteServersResponse>(&bytes)
+                    serde_json::from_slice::<GetServersResponse>(&bytes)
                         .map_err(ResponseError::InvalidJson)
                 }
 
