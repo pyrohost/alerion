@@ -17,7 +17,7 @@ pub async fn ws(
     let uuid = server_uuid.into_inner();
     let config = config.into_inner();
 
-    if let Some(server) = server_pool.get(uuid).await {
+    if let Some(server) = server_pool.get_server(uuid).await {
         // if the server doesn't exist well we'll see
         let (conn, auth_tracker) = server.new_connection_with_auth_tracker();
         let (addr, resp) = crate::websocket::start_websocket(uuid, &config, conn, &req, payload)?;

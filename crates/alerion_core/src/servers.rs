@@ -13,7 +13,7 @@ use crate::websocket::relay::{AuthTracker, ClientConnection, ServerConnection};
 
 pub struct ServerPoolBuilder {
     servers: HashMap<Uuid, Arc<Server>>,
-    remote_api: remote::RemoteClient,
+    remote_api: Arc<remote::RemoteClient>,
 }
 
 impl ServerPoolBuilder {
@@ -21,12 +21,21 @@ impl ServerPoolBuilder {
 
         Self {
             servers: HashMap::new(),
-            remote_api: remote::RemoteClient::new(config),
+            remote_api: Arc::new(remote::RemoteClient::new(config)),
         }
     }
 
-    pub fn fetch_servers(mut self) -> ServerPoolBuilder {
-        self
+    pub async fn fetch_servers(mut self) -> Result<ServerPoolBuilder, remote::ResponseError> {
+        let servers = self.remote_api.get_servers().await?;
+
+        for s in servers {
+            let uuid = s.uuid;
+            let info = ServerInfo::from_remote_info(s.settings);
+            let server = Server::new(uuid, info, Arc::clone(&self.remote_api));
+            self.servers.insert(uuid, Arc::new(server));
+        }
+
+        Ok(self)
     }
 
     pub fn build(self) -> ServerPool {
@@ -39,7 +48,7 @@ impl ServerPoolBuilder {
 
 pub struct ServerPool {
     servers: RwLock<HashMap<Uuid, Arc<Server>>>,
-    remote_api: remote::RemoteClient,
+    remote_api: Arc<remote::RemoteClient>,
 }
 
 impl ServerPool {
@@ -47,28 +56,47 @@ impl ServerPool {
         ServerPoolBuilder::from_config(config)
     }
 
-    pub async fn create_server(&self, uuid: Uuid) -> Arc<Server> {
-        let server = Arc::new(Server::new(uuid));
-        self.servers.write().await.insert(uuid, Arc::clone(&server));
-        server
-    }
-
-    pub async fn get(&self, uuid: Uuid) -> Option<Arc<Server>> {
-        self.servers.read().await.get(&uuid).map(Arc::clone)
-    }
-
-    pub async fn get_or_create(&self, uuid: Uuid) -> Arc<Server> {
+    pub async fn get_or_create_server(&self, uuid: Uuid) -> Result<Arc<Server>, remote::ResponseError> {
         // initially try to read, because most of the times we'll only need to read
         // and we can therefore reduce waiting by a lot using a read-write lock.
         let map = self.servers.read().await;
 
         match map.get(&uuid) {
-            Some(s) => Arc::clone(s),
+            Some(s) => Ok(Arc::clone(s)),
 
             None => {
                 drop(map);
                 self.create_server(uuid).await
             }
+        }
+    }
+
+    pub async fn create_server(&self, uuid: Uuid) -> Result<Arc<Server>, remote::ResponseError> {
+        let remote_api = Arc::clone(&self.remote_api);
+
+        let config = remote_api.get_server_configuration(uuid).await?;
+
+        let server_info = ServerInfo::from_remote_info(config.settings);
+
+        let server = Arc::new(Server::new(uuid, server_info, remote_api));
+        self.servers.write().await.insert(uuid, Arc::clone(&server));
+
+        Ok(server)
+    }
+
+    pub async fn get_server(&self, uuid: Uuid) -> Option<Arc<Server>> {
+        self.servers.read().await.get(&uuid).map(Arc::clone)
+    }
+}
+
+pub struct ServerInfo {
+    container: remote::ContainerConfig,
+}
+
+impl ServerInfo {
+    pub fn from_remote_info(server_settings: remote::ServerSettings) -> Self {
+        Self {
+            container: server_settings.container,
         }
     }
 }
@@ -80,10 +108,12 @@ pub struct Server {
     websocket_id_counter: AtomicU32,
     websockets: Mutex<HashMap<u32, ClientConnection>>,
     sender_copy: Sender<PanelMessage>,
+    server_info: ServerInfo,
+    remote_api: Arc<remote::RemoteClient>,
 }
 
 impl Server {
-    pub fn new(uuid: Uuid) -> Self {
+    pub fn new(uuid: Uuid, server_info: ServerInfo, remote_api: Arc<remote::RemoteClient>) -> Self {
         let (send, recv) = channel(128);
 
         tokio::spawn(task_websocket_receiver(recv));
@@ -95,8 +125,11 @@ impl Server {
             websocket_id_counter: AtomicU32::new(0),
             websockets: Mutex::new(HashMap::new()),
             sender_copy: send,
+            server_info,
+            remote_api,
         }
     }
+
 
     pub async fn add_websocket(&self, conn: ClientConnection) {
         let id = self.websocket_id_counter.fetch_add(1, Ordering::SeqCst);

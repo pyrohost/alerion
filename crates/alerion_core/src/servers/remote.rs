@@ -148,7 +148,7 @@ pub struct RemoteServersResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct RemoteSingleServerResponse {
-    pub settings: ServerData,
+    pub settings: ServerSettings,
     pub process_configuration: ProcessConfig,
 }
 
