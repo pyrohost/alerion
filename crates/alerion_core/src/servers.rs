@@ -3,7 +3,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use reqwest::header::{self, HeaderMap};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
@@ -14,42 +13,33 @@ use crate::websocket::relay::{AuthTracker, ClientConnection, ServerConnection};
 
 pub struct ServerPoolBuilder {
     servers: HashMap<Uuid, Arc<Server>>,
-    http_client: reqwest::Client,
+    remote_api: remote::RemoteClient,
 }
 
 impl ServerPoolBuilder {
     pub fn from_config(config: &AlerionConfig) -> Self {
-        let token_id = &config.token_id;
-        let token = &config.token;
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            header::AUTHORIZATION,
-            format!("Bearer {token_id}.{token}").parse().unwrap(),
-        );
 
         Self {
             servers: HashMap::new(),
-            http_client: reqwest::Client::builder()
-                .user_agent("alerion/0.1.0")
-                .default_headers(headers)
-                .build()
-                .unwrap(),
+            remote_api: remote::RemoteClient::new(config),
         }
+    }
+
+    pub fn fetch_servers(mut self) -> ServerPoolBuilder {
+        self
     }
 
     pub fn build(self) -> ServerPool {
         ServerPool {
             servers: RwLock::new(self.servers),
-            http_client: self.http_client,
+            remote_api: self.remote_api,
         }
     }
 }
 
-#[derive(Default)]
 pub struct ServerPool {
     servers: RwLock<HashMap<Uuid, Arc<Server>>>,
-    http_client: reqwest::Client,
+    remote_api: remote::RemoteClient,
 }
 
 impl ServerPool {
@@ -141,3 +131,5 @@ async fn task_websocket_receiver(mut receiver: Receiver<PanelMessage>) {
         }
     }
 }
+
+pub mod remote;
