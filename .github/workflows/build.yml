@@ -1,0 +1,114 @@
+on:
+  [push]
+
+name: Build and Lint
+permissions:
+  contents: write
+
+env:
+  # RUSTFLAGS: -Dwarnings
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+  # LIBCLANG_PATH: ${{ runner.temp }}/llvm/lib
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Set up cache
+        uses: actions/cache/restore@v4
+        with: 
+          path: |
+            ~/.cargo/bin/ 
+            ~/.cargo/registry/index/ 
+            ~/.cargo/registry/cache/ 
+            ~/.cargo/git/db/ 
+            ./target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Clippy Lints
+        run: |
+          cargo clippy --all-targets --all-features
+
+      #     - id: mirai_check
+        #  run: |
+        #  echo "mirai=$(cargo mirai --help && echo 1 || echo 0)" >> $GITHUB_OUTPUT
+      
+      #- name: Install LLVM and Clang
+        #  uses: KyleMayes/install-llvm-action@v2
+        #with:
+        #  version: "10.0"
+         # directory: ${{ runner.temp }}/llvm
+     
+      #- run: |
+          #    echo "LIBCLANG_PATH=$( ${{ runner.temp }}/llvm/bin )" >> $GITHUB_ENV
+
+      #- if: steps.mirai_check.outputs.mirai == 0
+        #  working-directory: ${{ runner.temp }}
+        #run: |
+          #sudo ln -s ${{ env.LLVM_PATH }}/lib/libclang-11.so.1 /lib/x86_64-linux-gnu/libclang.so
+         # git clone https://github.com/facebookexperimental/MIRAI.git
+          #git clone --depth=1 https://github.com/llvm/llvm-project.git
+          
+          #sudo apt update
+         # sudo apt install -y cmake build-essential libtool autoconf libncurses-dev
+
+          #cd llvm-project
+          #mkdir build
+          #cd build
+          #cmake -DLLVM_ENABLE_PROJECTS=clang -DCMAKE_BUILD_TYPE=Release -G "Unix Makefiles" ../llvm 
+          #make 
+
+          #echo "${{ runner.temp }}/llvm/build/bin" >> $GITHUB_PATH
+          #echo "LIBCLANG_PATH=${{ runner.temp }}/llvm/build/lib" >> $GITHUB_ENV
+
+      #- name: Install Z3
+        #  if: steps.mirai_check.outputs.mirai == 0
+        #uses: johnwason/vcpkg-action@v5
+        #with:
+        #  pkgs: z3
+        #  triplet: x64-linux
+        #  cache-key: ${{ runner.os }}
+        #  revision: master
+        #  token: ${{ secrets.PAT }}
+        #  extra-args: --clean-buildtrees-after-build
+
+      #- name: Install mirai
+        #  working-directory: ${{ runner.temp }}
+        # if: steps.mirai_check.outputs.mirai == 0
+        #run: |
+        #  echo $LIBCLANG_PATH
+        #  ls -la $LIBCLANG_PATH
+        #  cd MIRAI
+        #  cargo install --locked --force --path ./checker --no-default-features --features=vcpkg
+
+      #- name: Run mirai
+        #  run: |
+        #  cargo mirai --diag=default
+
+      - name: build
+        run: |
+          cargo build --release 
+
+      - name: Set up cache
+        uses: actions/cache/restore@v4
+        with: 
+          path: |
+            ~/.cargo/bin/ 
+            ~/.cargo/registry/index/ 
+            ~/.cargo/registry/cache/ 
+            ~/.cargo/git/db/ 
+            ./target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifacts@v4
+        with:
+          path: ./target/release/alerion*
