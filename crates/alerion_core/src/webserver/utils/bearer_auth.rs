@@ -100,11 +100,6 @@ where
             .filter(|s| bearer_matches_token(s, &self.token))
             .is_some();
 
-        {
-            use std::io::{stdout, Write};
-            stdout().flush().unwrap();
-        }
-
         match auth_ok {
             true => BearerAuthFuture::Ok {
                 ok_fut: self.service.call(req),
