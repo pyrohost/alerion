@@ -99,10 +99,9 @@ impl WebsocketConnectionImpl {
 
         match event.event() {
             EventType::Authentication => {
-                if self
-                    .auth
-                    .is_valid(&event.into_first_arg()?, &self.server_uuid)
-                {
+                let maybe_permissions = self.auth.validate(&event.into_first_arg()?, &self.server_uuid);
+
+                if let Some(permissions) = maybe_permissions {
                     self.server_conn.set_authenticated();
                     ctx.text(RawMessage::new_no_args(EventType::AuthenticationSuccess));
                 }

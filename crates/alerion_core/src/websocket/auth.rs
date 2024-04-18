@@ -110,10 +110,10 @@ impl Auth {
         Self { validation, key }
     }
 
-    pub fn is_valid(&self, auth: &str, server_uuid: &Uuid) -> bool {
+    pub fn validate(&self, auth: &str, server_uuid: &Uuid) -> Option<Permissions> {
         jsonwebtoken::decode::<Claims>(auth, &self.key, &self.validation)
             .ok()
             .filter(|result| &result.claims.server_uuid == server_uuid)
-            .is_some()
+            .map(|result| Permissions::from_strings(&result.claims.permissions))
     }
 }
