@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use bitflags::bitflags;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -21,59 +22,61 @@ struct Claims {
     unique_id: String,
 }
 
-#[derive(Debug, Default)]
-pub struct Permissions {
-    pub connect: bool,
-    pub start: bool,
-    pub stop: bool,
-    pub restart: bool,
-    pub console: bool,
-    pub backup_read: bool,
-    pub admin_errors: bool,
-    pub admin_install: bool,
-    pub admin_transfer: bool,
+bitflags! {
+    pub struct Permissions: u32 {
+        const CONNECT = 1;
+        const START = 1 << 1;
+        const STOP = 1 << 2;
+        const RESTART = 1 << 3;
+        const CONSOLE = 1 << 4;
+        const BACKUP_READ = 1 << 5;
+        const ADMIN_ERRORS = 1 << 6;
+        const ADMIN_INSTALL = 1 << 7;
+        const ADMIN_TRANSFER = 1 << 8;
+    }
 }
 
 impl Permissions {
     pub fn from_strings(strings: &[impl AsRef<str>]) -> Self {
-        let mut this = Permissions::default();
+        let mut this = Permissions::empty();
 
         for s in strings {
             match s.as_ref() {
                 "*" => {
-                    this.connect = true;
-                    this.start = true;
-                    this.stop = true;
-                    this.restart = true;
-                    this.console = true;
-                    this.backup_read = true;
+                    this.insert(Permissions::CONNECT);
+                    this.insert(Permissions::START);
+                    this.insert(Permissions::STOP);
+                    this.insert(Permissions::RESTART);
+                    this.insert(Permissions::CONSOLE);
+                    this.insert(Permissions::BACKUP_READ);
+                    
                 }
                 "websocket.connect" => {
-                    this.connect = true;
+                    this.insert(Permissions::CONNECT);
                 }
                 "control.start" => {
-                    this.start = true;
+                    this.insert(Permissions::START);
                 }
                 "control.stop" => {
-                    this.stop = true;
+                    this.insert(Permissions::STOP);
                 }
                 "control.restart" => {
-                    this.restart = true;
+                    this.insert(Permissions::RESTART);
                 }
                 "control.console" => {
-                    this.console = true;
+                    this.insert(Permissions::CONSOLE);
                 }
                 "backup.read" => {
-                    this.backup_read = true;
+                    this.insert(Permissions::BACKUP_READ);
                 }
                 "admin.websocket.errors" => {
-                    this.admin_errors = true;
+                    this.insert(Permissions::ADMIN_ERRORS);
                 }
                 "admin.websocket.install" => {
-                    this.admin_install = true;
+                    this.insert(Permissions::ADMIN_INSTALL);
                 }
                 "admin.websocket.transfer" => {
-                    this.admin_transfer = true;
+                    this.insert(Permissions::ADMIN_TRANSFER);
                 }
                 _ => {}
             }
