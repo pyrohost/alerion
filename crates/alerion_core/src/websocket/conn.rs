@@ -59,7 +59,8 @@ impl Handler<ServerMessage> for WebsocketConnectionImpl {
             }
 
             ServerMessage::Stats(stats) => {
-                ctx.text(RawMessage::new(EventType::Stats, serde_json::to_string(&stats).unwrap()))
+                let str = serde_json::to_string(&stats).expect("JSON serialization should not fail");
+                ctx.text(RawMessage::new(EventType::Stats, str))
             }
         }
 

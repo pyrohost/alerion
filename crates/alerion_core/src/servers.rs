@@ -30,7 +30,7 @@ impl ServerPoolBuilder {
 
         Ok(Self {
             servers: HashMap::new(),
-            remote_api: Arc::new(remote::RemoteClient::new(config)),
+            remote_api: Arc::new(remote::RemoteClient::new(config)?),
             docker,
         })
     }
@@ -136,7 +136,7 @@ pub enum ServerError {
 struct IntoStringZst;
 
 impl From<IntoStringZst> for String {
-    fn from(value: IntoStringZst) -> Self {
+    fn from(_value: IntoStringZst) -> Self {
         String::new()
     }
 }

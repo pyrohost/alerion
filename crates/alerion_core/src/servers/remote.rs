@@ -35,28 +35,32 @@ pub struct RemoteClient {
 }
 
 impl RemoteClient {
-    pub fn new(config: &AlerionConfig) -> Self {
+    pub fn new(config: &AlerionConfig) -> Result<Self, ResponseError> {
         let token_id = &config.auth.token_id;
         let token = &config.auth.token;
 
         let mut headers = HeaderMap::new();
-        headers.insert(
-            header::AUTHORIZATION,
-            format!("Bearer {token_id}.{token}").parse().unwrap(),
-        );
-        //headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
-        headers.insert(header::ACCEPT, "application/vnd.pterodactyl.v1+json".parse().unwrap());
+
+        let authorization = format!("Bearer {token_id}.{token}")
+            .parse()
+            .expect("valid header value");
+
+        headers.insert(header::AUTHORIZATION, authorization);
+
+
+        let accept = "application/vnd.pterodactyl.v1+json".parse().expect("valid header value");
+
+        headers.insert(header::ACCEPT, accept);
 
         log::info!("{}", config.remote);
 
-        Self {
+        Ok(Self {
             remote: config.remote.clone(),
             http: reqwest::Client::builder()
                 .user_agent("alerion/0.1.0")
                 .default_headers(headers)
-                .build()
-                .unwrap(),
-        }
+                .build()?,
+        })
     }
 
     pub async fn post_installation_status(
@@ -77,7 +81,7 @@ impl RemoteClient {
         let resp = self
             .http
             .post(url)
-            .body(serde_json::to_string(&req).unwrap())
+            .body(serde_json::to_string(&req).expect("JSON serialization should not fail"))
             .send()
             .await?;
 
@@ -190,7 +194,9 @@ impl RemoteClient {
             });
 
             if parsed.meta.current_page == parsed.meta.last_page {
-                return Ok(servers.unwrap());
+                return Ok(unsafe {
+                    servers.unwrap_unchecked()
+                });
             }
 
             page += 1;
