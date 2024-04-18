@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::cell::Cell;
 
 use actix::{Actor, ActorContext, Addr, Handler, StreamHandler};
 use actix_web_actors::ws;
@@ -7,7 +8,7 @@ use uuid::Uuid;
 
 use crate::config::AlerionConfig;
 
-use super::auth::Auth;
+use super::auth::{Auth, Permissions};
 use super::relay::ServerConnection;
 
 #[derive(Debug, Clone)]
@@ -25,6 +26,7 @@ impl actix::Message for ServerMessage {
 pub enum PanelMessage {
     Command(String),
     ReceiveLogs,
+    ReceiveInstallLog,
     ReceiveStats,
 }
 
@@ -34,10 +36,16 @@ impl actix::Message for PanelMessage {
 
 pub type ConnectionAddr = Addr<WebsocketConnectionImpl>;
 
+enum MessageError {
+    InvalidJwt,
+    Generic(String),
+}
+
 pub struct WebsocketConnectionImpl {
     server_uuid: Uuid,
     server_conn: ServerConnection,
     auth: Auth,
+    permissions: Cell<Permissions>,
 }
 
 impl Actor for WebsocketConnectionImpl {
@@ -71,7 +79,7 @@ impl Handler<ServerMessage> for WebsocketConnectionImpl {
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebsocketConnectionImpl {
     fn handle(&mut self, item: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         use ws::Message;
-        // just ignore bad messages
+
         let Ok(msg) = item else {
             return;
         };
@@ -91,6 +99,7 @@ impl WebsocketConnectionImpl {
             server_uuid,
             server_conn,
             auth: Auth::from_config(cfg),
+            permissions: Cell::new(Permissions::empty()),
         }
     }
 
@@ -103,8 +112,13 @@ impl WebsocketConnectionImpl {
                 let maybe_permissions = self.auth.validate(&event.into_first_arg()?, &self.server_uuid);
 
                 if let Some(permissions) = maybe_permissions {
-                    self.server_conn.set_authenticated();
-                    ctx.text(RawMessage::new_no_args(EventType::AuthenticationSuccess));
+                    if permissions.contains(Permissions::CONNECT) {
+                        self.permissions.set(permissions);
+                        self.server_conn.set_authenticated();
+                        ctx.text(RawMessage::new_no_args(EventType::AuthenticationSuccess));
+                    }
+                } else {
+                    self.send_error(ctx, MessageError::InvalidJwt);
                 }
 
                 Some(())
@@ -112,21 +126,35 @@ impl WebsocketConnectionImpl {
 
             ty => {
                 if self.server_conn.is_authenticated() {
+                    let permissions = self.permissions.get();
+
                     match ty {
                         EventType::SendCommand => {
-                            self.server_conn.send_if_authenticated(|| {
-                                PanelMessage::Command("silly".to_owned())
-                            });
+                            if permissions.contains(Permissions::CONSOLE) {
+                                if let Some(command) = event.into_first_arg() {
+                                    self.server_conn.send_if_authenticated(PanelMessage::Command(command));
+                                } else {
+                                    self.send_error(ctx, MessageError::InvalidJwt);
+                                }
+
+                            }
                         }
 
                         EventType::SendStats => {
-                            self.server_conn
-                                .send_if_authenticated(|| PanelMessage::ReceiveStats);
+                            if permissions.contains(Permissions::CONSOLE) {
+                                self.server_conn
+                                    .send_if_authenticated(PanelMessage::ReceiveStats);
+                            }
                         }
 
                         EventType::SendLogs => {
-                            self.server_conn
-                                .send_if_authenticated(|| PanelMessage::ReceiveLogs);
+                            if permissions.contains(Permissions::CONSOLE) {
+                                self.server_conn.send_if_authenticated(PanelMessage::ReceiveLogs);
+
+                                if permissions.contains(Permissions::ADMIN_INSTALL) {
+                                    self.server_conn.force_send(PanelMessage::ReceiveInstallLog);
+                                }
+                            }
                         }
 
                         e => todo!("{e:?}"),
@@ -136,5 +164,21 @@ impl WebsocketConnectionImpl {
                 Some(())
             }
         }
+    }
+
+    #[inline(always)]
+    fn send_error(&self, ctx: &mut <Self as Actor>::Context, err: MessageError) {
+        let precise_errors = self.permissions.get().contains(Permissions::ADMIN_ERRORS);
+
+        let raw_msg = if precise_errors {
+            match err {
+                MessageError::InvalidJwt => RawMessage::new_no_args(EventType::JwtError),
+                MessageError::Generic(s) => RawMessage::new(EventType::DaemonError, s),
+            }
+        } else {
+            RawMessage::new(EventType::DaemonError, "An unexpected error occurred".to_owned())
+        };
+
+        ctx.text(raw_msg)
     }
 }

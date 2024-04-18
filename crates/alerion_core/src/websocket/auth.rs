@@ -23,6 +23,7 @@ struct Claims {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, Copy)]
     pub struct Permissions: u32 {
         const CONNECT = 1;
         const START = 1 << 1;
