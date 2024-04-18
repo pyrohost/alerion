@@ -1,3 +1,6 @@
+#![deny(clippy::unwrap_used)]
+#![allow(dead_code)]
+
 pub mod config;
 pub mod filesystem;
 pub mod logging;

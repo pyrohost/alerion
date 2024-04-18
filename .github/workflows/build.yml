@@ -6,8 +6,8 @@ permissions:
   contents: write
 
 env:
-  # RUSTFLAGS: -Dwarnings
-  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+  RUSTFLAGS: -Dwarnings
+  # VCPKG_ROOT: ${{ github.workspace }}/vcpkg
   # LIBCLANG_PATH: ${{ runner.temp }}/llvm/lib
 
 jobs:
@@ -109,6 +109,6 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Upload Artifacts
-        uses: actions/upload-artifacts@v4
+        uses: actions/upload-artifact@v4
         with:
           path: ./target/release/alerion*
