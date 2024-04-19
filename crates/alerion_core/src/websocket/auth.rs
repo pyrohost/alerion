@@ -95,8 +95,10 @@ pub struct Auth {
 impl Auth {
     pub fn from_config(cfg: &AlerionConfig) -> Self {
         let mut validation = Validation::new(Algorithm::HS256);
-        validation.required_spec_claims =
-            HashSet::from(["exp", "nbf", "aud", "iss"].map(ToOwned::to_owned));
+
+        let spec_claims = ["exp", "nbf", "aud", "iss"].map(ToOwned::to_owned);
+
+        validation.required_spec_claims = HashSet::from(spec_claims);
         validation.leeway = 10;
         validation.reject_tokens_expiring_in_less_than = 0;
         validation.validate_exp = false;
