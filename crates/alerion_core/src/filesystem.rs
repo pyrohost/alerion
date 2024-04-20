@@ -1,7 +1,7 @@
 use anyhow::Context;
 use directories::ProjectDirs;
 
-pub async fn setup_directories() -> anyhow::Result<ProjectDirs> { 
+pub async fn setup_directories() -> anyhow::Result<ProjectDirs> {
     let project_dirs = ProjectDirs::from("host", "pyro", "alerion")
         .context("couldn't determine a home directory for your operating system")?;
 

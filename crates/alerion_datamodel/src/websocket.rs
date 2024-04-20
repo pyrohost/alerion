@@ -1,5 +1,5 @@
-use serde::{Serialize, Deserialize};
 use bytestring::ByteString;
+use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Copy, Clone, Debug, Serialize, PartialEq, Eq)]
@@ -84,7 +84,10 @@ impl RawMessage {
     }
 
     pub fn new(event: EventType, args: String) -> Self {
-        Self { event, args: Some(smallvec![serde_json::Value::String(args)]) }
+        Self {
+            event,
+            args: Some(smallvec![serde_json::Value::String(args)]),
+        }
     }
 
     pub fn into_first_arg(self) -> Option<String> {

@@ -5,10 +5,9 @@ use actix_web_actors::ws;
 use alerion_datamodel::websocket::*;
 use uuid::Uuid;
 
-use crate::config::AlerionConfig;
-
 use super::auth::Auth;
 use super::relay::ServerConnection;
+use crate::config::AlerionConfig;
 
 #[derive(Debug, Clone)]
 pub enum ServerMessage {
@@ -59,7 +58,8 @@ impl Handler<ServerMessage> for WebsocketConnectionImpl {
             }
 
             ServerMessage::Stats(stats) => {
-                let str = serde_json::to_string(&stats).expect("JSON serialization should not fail");
+                let str =
+                    serde_json::to_string(&stats).expect("JSON serialization should not fail");
                 ctx.text(RawMessage::new(EventType::Stats, str))
             }
         }

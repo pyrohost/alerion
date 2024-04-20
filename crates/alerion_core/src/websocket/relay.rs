@@ -12,7 +12,11 @@ pub struct ServerConnection {
 }
 
 impl ServerConnection {
-    pub fn new(auth_tracker: Arc<AuthTracker>, sender: Sender<(u32, PanelMessage)>, id: u32) -> Self {
+    pub fn new(
+        auth_tracker: Arc<AuthTracker>,
+        sender: Sender<(u32, PanelMessage)>,
+        id: u32,
+    ) -> Self {
         ServerConnection {
             auth_tracker,
             sender,
@@ -59,7 +63,7 @@ impl ClientConnection {
 
     pub fn send_if_authenticated<F>(&self, msg: F)
     where
-        F: FnOnce() -> ServerMessage
+        F: FnOnce() -> ServerMessage,
     {
         if self.auth_tracker.get_auth() {
             let m = msg();

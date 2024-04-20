@@ -1,11 +1,7 @@
 use std::mem;
 
 use alerion_datamodel::remote::server::{
-    PostServerInstallByUuidRequest,
-    GetServerInstallByUuidResponse,
-    GetServerByUuidResponse,
-    GetServersResponse,
-    ServerData,
+    GetServerByUuidResponse, GetServerInstallByUuidResponse, GetServersResponse, PostServerInstallByUuidRequest, ServerData
 };
 use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
@@ -47,8 +43,9 @@ impl RemoteClient {
 
         headers.insert(header::AUTHORIZATION, authorization);
 
-
-        let accept = "application/vnd.pterodactyl.v1+json".parse().expect("valid header value");
+        let accept = "application/vnd.pterodactyl.v1+json"
+            .parse()
+            .expect("valid header value");
 
         headers.insert(header::ACCEPT, accept);
 
@@ -74,7 +71,11 @@ impl RemoteClient {
             reinstall,
         };
 
-        let url = format!("{}/api/remote/servers/{}/install", self.remote, uuid.as_hyphenated());
+        let url = format!(
+            "{}/api/remote/servers/{}/install",
+            self.remote,
+            uuid.as_hyphenated()
+        );
 
         log::debug!("remote: POST {url}");
 
@@ -96,15 +97,15 @@ impl RemoteClient {
         &self,
         uuid: Uuid,
     ) -> Result<GetServerInstallByUuidResponse, ResponseError> {
-        let url = format!("{}/api/remote/servers/{}/install", self.remote, uuid.as_hyphenated());
-        
+        let url = format!(
+            "{}/api/remote/servers/{}/install",
+            self.remote,
+            uuid.as_hyphenated()
+        );
+
         log::debug!("remote: GET {url}");
 
-        let resp = self
-            .http
-            .get(url)
-            .send()
-            .await?;
+        let resp = self.http.get(url).send().await?;
 
         match resp.status() {
             StatusCode::NOT_FOUND => Err(ResponseError::NotFound(uuid)),
@@ -124,15 +125,15 @@ impl RemoteClient {
         &self,
         uuid: Uuid,
     ) -> Result<GetServerByUuidResponse, ResponseError> {
-        let url = format!("{}/api/remote/servers/{}", self.remote, uuid.as_hyphenated());
+        let url = format!(
+            "{}/api/remote/servers/{}",
+            self.remote,
+            uuid.as_hyphenated()
+        );
 
         log::debug!("remote: GET {url}");
 
-        let resp = self
-            .http
-            .get(url)
-            .send()
-            .await?;
+        let resp = self.http.get(url).send().await?;
 
         match resp.status() {
             StatusCode::NOT_FOUND => Err(ResponseError::NotFound(uuid)),
@@ -153,15 +154,14 @@ impl RemoteClient {
         let mut page = 1;
 
         loop {
-            let url = format!("{}/api/remote/servers?page={}&per_page=2", self.remote, page);
+            let url = format!(
+                "{}/api/remote/servers?page={}&per_page=2",
+                self.remote, page
+            );
 
             log::debug!("remote: GET {url}");
 
-            let resp = self
-                .http
-                .get(url)
-                .send()
-                .await?;
+            let resp = self.http.get(url).send().await?;
 
             let parsed = match resp.status() {
                 StatusCode::UNAUTHORIZED => Err(ResponseError::Unauthorized),
@@ -194,9 +194,7 @@ impl RemoteClient {
             });
 
             if parsed.meta.current_page == parsed.meta.last_page {
-                return Ok(unsafe {
-                    servers.unwrap_unchecked()
-                });
+                return Ok(unsafe { servers.unwrap_unchecked() });
             }
 
             page += 1;

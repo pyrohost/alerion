@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -48,4 +48,3 @@ pub struct ConfigUpdateRequest {
 pub struct ConfigUpdateResponse {
     pub applied: bool,
 }
-
