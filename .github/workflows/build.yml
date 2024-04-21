@@ -110,9 +110,9 @@ jobs:
           cargo +nightly fmt 
           git config --global user.name "GitHub Actions"
           git config --global user.email "team@pyro.host"
-          git commit -am "refactor: rustfmt [skip ci]"
+          git commit -am "refactor: rustfmt [skip ci]" && echo 1 || echo 1
 
-          git push
+          git push && echo 0 || echo 1
 
 
       - name: Set up cache
