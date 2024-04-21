@@ -1,22 +1,17 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::time::Instant;
 
-use actix_web::HttpResponse;
 use alerion_datamodel::remote::server::{ContainerConfig, ServerSettings};
-use alerion_datamodel::websocket::{NetworkStatistics, PerformanceStatisics, ServerStatus};
 use bollard::container::{Config, CreateContainerOptions};
 use bollard::Docker;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::config::AlerionConfig;
-use crate::websocket::conn::{ConnectionAddr, PanelMessage, ServerMessage};
-use crate::websocket::relay::{AuthTracker, ClientConnection, ServerConnection};
 
 pub struct ServerPoolBuilder {
     servers: HashMap<Uuid, Arc<Server>>,
@@ -147,8 +142,6 @@ pub struct Server {
     uuid: Uuid,
     container_name: String,
     websocket_id_counter: AtomicU32,
-    websockets: RwLock<HashMap<u32, ClientConnection>>,
-    sender_copy: Sender<(u32, PanelMessage)>,
     server_info: ServerInfo,
     remote_api: Arc<remote::RemoteClient>,
     docker: Arc<Docker>,
@@ -161,22 +154,15 @@ impl Server {
         remote_api: Arc<remote::RemoteClient>,
         docker: Arc<Docker>,
     ) -> Result<Arc<Self>, ServerError> {
-        let (send, recv) = channel(128);
-
         let server = Arc::new(Self {
             start_time: Instant::now(),
             uuid,
             container_name: format!("{}_container", uuid.as_hyphenated()),
             websocket_id_counter: AtomicU32::new(0),
-            websockets: RwLock::new(HashMap::new()),
-            sender_copy: send,
             server_info,
             remote_api,
             docker,
         });
-
-        tokio::spawn(task_websocket_receiver(recv));
-        tokio::spawn(monitor_performance_metrics(Arc::clone(&server)));
 
         server.create_docker_container().await?;
 
@@ -208,73 +194,8 @@ impl Server {
         Ok(())
     }
 
-    pub async fn setup_new_websocket<F>(
-        &self,
-        start_websocket: F,
-    ) -> actix_web::Result<HttpResponse>
-    where
-        F: FnOnce(ServerConnection) -> actix_web::Result<(ConnectionAddr, HttpResponse)>,
-    {
-        let id = self.websocket_id_counter.fetch_add(1, Ordering::SeqCst);
-
-        // setup the request channel for the websocket
-        let auth_tracker = Arc::new(AuthTracker::new(self.server_time()));
-        let sender = self.sender_copy.clone();
-        let server_conn = ServerConnection::new(Arc::clone(&auth_tracker), sender, id);
-
-        // setup a websocket connection through the user-provided closure
-        let (addr, response) = start_websocket(server_conn)?;
-
-        // add the obtained reply channel to the list of websocket connections
-        let client_conn = ClientConnection::new(auth_tracker, addr);
-        let mut websockets = self.websockets.write().await;
-        websockets.insert(id, client_conn);
-
-        // give back the HTTP 101 response
-        Ok(response)
-    }
-
-    pub async fn send_to_available_websockets(&self, msg: ServerMessage) {
-        let lock = self.websockets.read().await;
-
-        for sender in lock.values() {
-            sender.send_if_authenticated(|| msg.clone());
-        }
-    }
-
     pub fn server_time(&self) -> u64 {
         self.start_time.elapsed().as_millis() as u64
-    }
-}
-
-async fn monitor_performance_metrics(server: Arc<Server>) {
-    loop {
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-        let stats = PerformanceStatisics {
-            memory_bytes: server.server_time() as usize,
-            memory_limit_bytes: 1024usize.pow(3) * 8,
-            cpu_absolute: 50.11,
-            network: NetworkStatistics {
-                rx_bytes: 1024,
-                tx_bytes: 800,
-            },
-            uptime: 5000 + server.server_time(),
-            state: ServerStatus::Running,
-            disk_bytes: 100,
-        };
-
-        server
-            .send_to_available_websockets(ServerMessage::Stats(stats))
-            .await;
-    }
-}
-
-async fn task_websocket_receiver(mut receiver: Receiver<(u32, PanelMessage)>) {
-    loop {
-        if let Some(msg) = receiver.recv().await {
-            log::debug!("Server received websocket message: {msg:?}");
-        }
     }
 }
 
