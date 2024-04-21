@@ -50,7 +50,6 @@ impl Permissions {
                     this.insert(Permissions::RESTART);
                     this.insert(Permissions::CONSOLE);
                     this.insert(Permissions::BACKUP_READ);
-                    
                 }
                 "websocket.connect" => {
                     this.insert(Permissions::CONNECT);

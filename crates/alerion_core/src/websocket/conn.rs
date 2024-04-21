@@ -1,5 +1,5 @@
-use std::convert::Infallible;
 use std::cell::Cell;
+use std::convert::Infallible;
 
 use actix::{Actor, ActorContext, Addr, Handler, StreamHandler};
 use actix_web_actors::ws;
@@ -109,7 +109,9 @@ impl WebsocketConnectionImpl {
 
         match event.event() {
             EventType::Authentication => {
-                let maybe_permissions = self.auth.validate(&event.into_first_arg()?, &self.server_uuid);
+                let maybe_permissions = self
+                    .auth
+                    .validate(&event.into_first_arg()?, &self.server_uuid);
 
                 if let Some(permissions) = maybe_permissions {
                     if permissions.contains(Permissions::CONNECT) {
@@ -132,11 +134,11 @@ impl WebsocketConnectionImpl {
                         EventType::SendCommand => {
                             if permissions.contains(Permissions::CONSOLE) {
                                 if let Some(command) = event.into_first_arg() {
-                                    self.server_conn.send_if_authenticated(PanelMessage::Command(command));
+                                    self.server_conn
+                                        .send_if_authenticated(PanelMessage::Command(command));
                                 } else {
                                     self.send_error(ctx, MessageError::InvalidJwt);
                                 }
-
                             }
                         }
 
@@ -149,7 +151,8 @@ impl WebsocketConnectionImpl {
 
                         EventType::SendLogs => {
                             if permissions.contains(Permissions::CONSOLE) {
-                                self.server_conn.send_if_authenticated(PanelMessage::ReceiveLogs);
+                                self.server_conn
+                                    .send_if_authenticated(PanelMessage::ReceiveLogs);
 
                                 if permissions.contains(Permissions::ADMIN_INSTALL) {
                                     self.server_conn.force_send(PanelMessage::ReceiveInstallLog);
@@ -176,7 +179,10 @@ impl WebsocketConnectionImpl {
                 MessageError::Generic(s) => RawMessage::new(EventType::DaemonError, s),
             }
         } else {
-            RawMessage::new(EventType::DaemonError, "An unexpected error occurred".to_owned())
+            RawMessage::new(
+                EventType::DaemonError,
+                "An unexpected error occurred".to_owned(),
+            )
         };
 
         ctx.text(raw_msg)
