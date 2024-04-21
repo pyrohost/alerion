@@ -266,7 +266,10 @@ impl From<wings::Config> for AlerionConfig {
 
 impl AlerionConfig {
     pub fn load(project_dirs: &directories::ProjectDirs) -> anyhow::Result<Self> {
-        tracing::info!("Loading Alerion config from {}", project_dirs.config_dir().display());
+        tracing::info!(
+            "Loading Alerion config from {}",
+            project_dirs.config_dir().display()
+        );
         let config_path = project_dirs.config_dir().join("config.json");
         let config = std::fs::read_to_string(&config_path).map_err(|e| {
             anyhow::anyhow!(

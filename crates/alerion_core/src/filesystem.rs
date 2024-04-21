@@ -9,7 +9,7 @@ pub async fn setup_directories() -> anyhow::Result<ProjectDirs> {
     tokio::fs::create_dir_all(project_dirs.config_dir()).await?;
     tokio::fs::create_dir_all(project_dirs.data_dir()).await?;
     tokio::fs::create_dir_all(project_dirs.cache_dir()).await?;
-    
+
     tracing::info!("Directories created");
 
     Ok(project_dirs)

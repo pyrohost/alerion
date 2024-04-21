@@ -98,7 +98,7 @@ impl ClientConnection {
         self.expire_auth();
         self.ws_sender.do_send(ServerMessage::Kill);
     }
-    
+
     #[tracing::instrument(skip(self), fields(id=format!("{:?}", self.ws_sender)))]
     pub fn expire_auth(&self) {
         tracing::debug!("Auth expired.");

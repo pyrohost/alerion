@@ -104,7 +104,7 @@ impl WebsocketConnectionImpl {
             permissions: Cell::new(Permissions::empty()),
         }
     }
-    
+
     pub fn id(&self) -> Uuid {
         self.server_uuid
     }

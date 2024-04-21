@@ -57,7 +57,7 @@ impl ServerPoolBuilder {
 
         Ok(self)
     }
-    
+
     #[tracing::instrument(skip(self))]
     pub fn build(self) -> ServerPool {
         tracing::debug!("Server pool built");
@@ -90,7 +90,7 @@ impl ServerPool {
             Some(s) => {
                 tracing::debug!("Server {uuid} found");
                 Ok(Arc::clone(s))
-            },
+            }
 
             None => {
                 tracing::debug!("Server {uuid} not found, creating");
