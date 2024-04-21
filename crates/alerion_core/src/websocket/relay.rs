@@ -32,15 +32,14 @@ impl ServerConnection {
         self.auth_tracker.get_auth()
     }
 
-    #[inline]
-    pub fn send_if_authenticated<F>(&self, msg: F)
-    where
-        F: FnOnce() -> PanelMessage,
-    {
+    pub fn send_if_authenticated(&self, msg: PanelMessage) {
         if self.auth_tracker.get_auth() {
-            let value = msg();
-            let _ = self.sender.try_send((self.id, value));
+            let _ = self.sender.try_send((self.id, msg));
         }
+    }
+
+    pub fn force_send(&self, msg: PanelMessage) {
+        let _ = self.sender.try_send((self.id, msg));
     }
 
     pub fn auth_tracker(&self) -> Arc<AuthTracker> {
@@ -61,6 +60,7 @@ impl ClientConnection {
         }
     }
 
+    /// Uses a closure because many messages might be expensive to compute.
     pub fn send_if_authenticated<F>(&self, msg: F)
     where
         F: FnOnce() -> ServerMessage,

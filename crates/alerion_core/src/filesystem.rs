@@ -11,3 +11,4 @@ pub async fn setup_directories() -> anyhow::Result<ProjectDirs> {
 
     Ok(project_dirs)
 }
+
