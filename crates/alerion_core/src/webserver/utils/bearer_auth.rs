@@ -7,7 +7,7 @@ use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Tr
 use actix_web::http::header;
 use actix_web::{Error, HttpResponse};
 use futures::ready;
-use log::info;
+use tracing::info;
 use pin_project_lite::pin_project;
 
 pin_project! {

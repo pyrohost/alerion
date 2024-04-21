@@ -85,6 +85,8 @@ impl Webserver {
         let ip = config.api.host;
         let port = config.api.port;
 
+        tracing::info!("Starting webserver on {}:{}", ip, port);
+
         let server_fut = http_server
             .worker_max_blocking_threads(16)
             .workers(1)

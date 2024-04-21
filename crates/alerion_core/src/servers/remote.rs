@@ -49,7 +49,7 @@ impl RemoteClient {
 
         headers.insert(header::ACCEPT, accept);
 
-        log::info!("{}", config.remote);
+        tracing::info!("{}", config.remote);
 
         Ok(Self {
             remote: config.remote.clone(),
@@ -77,7 +77,7 @@ impl RemoteClient {
             uuid.as_hyphenated()
         );
 
-        log::debug!("remote: POST {url}");
+        tracing::debug!("remote: POST {url}");
 
         let resp = self
             .http
@@ -103,7 +103,7 @@ impl RemoteClient {
             uuid.as_hyphenated()
         );
 
-        log::debug!("remote: GET {url}");
+        tracing::debug!("remote: GET {url}");
 
         let resp = self.http.get(url).send().await?;
 
@@ -131,7 +131,7 @@ impl RemoteClient {
             uuid.as_hyphenated()
         );
 
-        log::debug!("remote: GET {url}");
+        tracing::debug!("remote: GET {url}");
 
         let resp = self.http.get(url).send().await?;
 
@@ -159,7 +159,7 @@ impl RemoteClient {
                 self.remote, page
             );
 
-            log::debug!("remote: GET {url}");
+            tracing::debug!("remote: GET {url}");
 
             let resp = self.http.get(url).send().await?;
 
@@ -181,7 +181,7 @@ impl RemoteClient {
 
             let mut parsed = parsed?;
 
-            log::debug!("{parsed:#?}");
+            tracing::debug!("{parsed:#?}");
 
             let server_data = mem::take(&mut parsed.data);
 

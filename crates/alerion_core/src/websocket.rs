@@ -12,6 +12,7 @@ pub fn start_websocket(
     req: &HttpRequest,
     payload: web::Payload,
 ) -> actix_web::Result<(conn::ConnectionAddr, HttpResponse)> {
+    tracing::debug!("Webscoket Started. Connected to server {}", &server_uuid);
     let conn = conn::WebsocketConnectionImpl::new(server_uuid, conn, config);
     ws::WsResponseBuilder::new(conn, req, payload).start_with_addr()
 }

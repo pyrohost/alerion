@@ -1,5 +1,4 @@
 #![deny(clippy::unwrap_used)]
-#![allow(dead_code)]
 
 pub mod config;
 pub mod filesystem;
@@ -20,9 +19,9 @@ use crate::filesystem::setup_directories;
 /// Alerion main entrypoint. Expects a tokio runtime to be setup.
 pub async fn alerion_main() -> anyhow::Result<()> {
     logging::splash();
-    logging::setup();
+    //logging::setup();
 
-    log::info!("Starting Alerion");
+    tracing::info!("Starting Alerion");
 
     let project_dirs = setup_directories().await?;
     let config = AlerionConfig::load(&project_dirs)?;

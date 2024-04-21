@@ -98,6 +98,7 @@ impl ClientConnection {
 
 /// A middleman between a websocket connection and a server, which keeps track of
 /// auth state and the status of the websocket connection.
+#[allow(dead_code)]
 pub struct AuthTracker {
     started_at: AtomicU64,
     authenticated: AtomicBool,

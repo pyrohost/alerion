@@ -36,12 +36,12 @@ impl ServerPoolBuilder {
     }
 
     pub async fn fetch_servers(mut self) -> Result<ServerPoolBuilder, ServerError> {
-        log::info!("Fetching existing servers on this node");
+        tracing::info!("Fetching existing servers on this node");
 
         let servers = self.remote_api.get_servers().await?;
 
         for s in servers {
-            log::info!("Adding server {}", s.uuid);
+            tracing::info!("Adding server {}", s.uuid);
 
             let uuid = s.uuid;
             let info = ServerInfo::from_remote_info(s.settings);
@@ -94,7 +94,7 @@ impl ServerPool {
     }
 
     pub async fn create_server(&self, uuid: Uuid) -> Result<Arc<Server>, ServerError> {
-        log::info!("Creating server {uuid}");
+        tracing::info!("Creating server {uuid}");
 
         let remote_api = Arc::clone(&self.remote_api);
         let docker = Arc::clone(&self.docker);
@@ -184,7 +184,7 @@ impl Server {
     }
 
     async fn create_docker_container(&self) -> Result<(), ServerError> {
-        log::info!(
+        tracing::info!(
             "Creating docker container for server {}",
             self.uuid.as_hyphenated()
         );
@@ -203,7 +203,7 @@ impl Server {
 
         let response = self.docker.create_container(Some(opts), config).await?;
 
-        log::debug!("{response:#?}");
+        tracing::debug!("{response:#?}");
 
         Ok(())
     }
@@ -273,7 +273,7 @@ async fn monitor_performance_metrics(server: Arc<Server>) {
 async fn task_websocket_receiver(mut receiver: Receiver<(u32, PanelMessage)>) {
     loop {
         if let Some(msg) = receiver.recv().await {
-            log::debug!("Server received websocket message: {msg:?}");
+            tracing::debug!("Server received websocket message: {msg:?}");
         }
     }
 }
