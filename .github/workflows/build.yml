@@ -24,6 +24,12 @@ jobs:
           toolchain: stable
           override: true
 
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          profile: minimal
+          components: rustfmt
+
       - name: Set up cache
         uses: actions/cache/restore@v4
         with: 

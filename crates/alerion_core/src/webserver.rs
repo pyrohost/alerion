@@ -78,10 +78,7 @@ impl Webserver {
                                 .wrap(BearerAuth::new(token.clone()))
                                 .to(api::update_post),
                         )
-                        .service(
-                            web::scope("/servers/{id}")
-                                .route("ws", web::get().to(api::ws)),
-                        )
+                        .service(web::scope("/servers/{id}").route("ws", web::get().to(api::ws)))
                 })
         });
 

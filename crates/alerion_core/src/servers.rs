@@ -4,18 +4,18 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use actix_web::HttpResponse;
-use alerion_datamodel::websocket::{PerformanceStatisics, NetworkStatistics, ServerStatus};
 use alerion_datamodel::remote::server::{ContainerConfig, ServerSettings};
+use alerion_datamodel::websocket::{NetworkStatistics, PerformanceStatisics, ServerStatus};
+use bollard::container::{Config, CreateContainerOptions};
+use bollard::Docker;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use bollard::Docker;
-use bollard::container::{Config, CreateContainerOptions};
-use thiserror::Error;
-use serde::{Serialize, Deserialize};
 
 use crate::config::AlerionConfig;
-use crate::websocket::conn::{ConnectionAddr , PanelMessage, ServerMessage};
+use crate::websocket::conn::{ConnectionAddr, PanelMessage, ServerMessage};
 use crate::websocket::relay::{AuthTracker, ClientConnection, ServerConnection};
 
 pub struct ServerPoolBuilder {
@@ -50,7 +50,8 @@ impl ServerPoolBuilder {
                 info,
                 Arc::clone(&self.remote_api),
                 Arc::clone(&self.docker),
-            ).await?;
+            )
+            .await?;
             self.servers.insert(uuid, server);
         }
 
@@ -183,7 +184,10 @@ impl Server {
     }
 
     async fn create_docker_container(&self) -> Result<(), ServerError> {
-        log::info!("Creating docker container for server {}", self.uuid.as_hyphenated());
+        log::info!(
+            "Creating docker container for server {}",
+            self.uuid.as_hyphenated()
+        );
 
         let opts = CreateContainerOptions {
             name: self.container_name.clone(),
@@ -204,7 +208,10 @@ impl Server {
         Ok(())
     }
 
-    pub async fn setup_new_websocket<F>(&self, start_websocket: F) -> actix_web::Result<HttpResponse>
+    pub async fn setup_new_websocket<F>(
+        &self,
+        start_websocket: F,
+    ) -> actix_web::Result<HttpResponse>
     where
         F: FnOnce(ServerConnection) -> actix_web::Result<(ConnectionAddr, HttpResponse)>,
     {
@@ -257,7 +264,9 @@ async fn monitor_performance_metrics(server: Arc<Server>) {
             disk_bytes: 100,
         };
 
-        server.send_to_available_websockets(ServerMessage::Stats(stats)).await;
+        server
+            .send_to_available_websockets(ServerMessage::Stats(stats))
+            .await;
     }
 }
 

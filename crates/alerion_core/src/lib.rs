@@ -27,12 +27,7 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     let project_dirs = setup_directories().await?;
     let config = AlerionConfig::load(&project_dirs)?;
 
-    let server_pool = Arc::new(
-        ServerPool::builder(&config)?
-            .fetch_servers()
-            .await?
-            .build()
-    );
+    let server_pool = Arc::new(ServerPool::builder(&config)?.fetch_servers().await?.build());
 
     //server_pool.create_server("0e4059ca-d79b-46a5-8ec4-95bd0736d150".try_into().unwrap()).await;
 

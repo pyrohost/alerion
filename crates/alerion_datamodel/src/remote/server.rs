@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use serde::{Serialize, Deserialize, de::IgnoredAny};
+use serde::de::IgnoredAny;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use smallvec::SmallVec;
 use uuid::Uuid;

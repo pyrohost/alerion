@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use actix_web::{web, HttpResponse, HttpRequest, Responder};
-use alerion_datamodel::webserver::CreateServerRequest;
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use alerion_datamodel::webserver::update::{ConfigUpdateRequest, ConfigUpdateResponse};
+use alerion_datamodel::webserver::CreateServerRequest;
 use uuid::Uuid;
 
+use crate::config::AlerionConfig;
 use crate::servers::ServerPool;
 use crate::webserver::SystemOptions;
-use crate::config::AlerionConfig;
 
 pub async fn servers_post(
     opts: web::Json<CreateServerRequest>,
@@ -52,4 +52,3 @@ pub async fn ws(
         Ok(HttpResponse::NotImplemented().into())
     }
 }
-
