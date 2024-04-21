@@ -7,10 +7,8 @@ use alerion_datamodel::websocket::*;
 use uuid::Uuid;
 
 use crate::config::AlerionConfig;
-
-use super::auth::{Auth, Permissions};
-use super::relay::ServerConnection;
-use crate::config::AlerionConfig;
+use crate::websocket::auth::{Auth, Permissions};
+use crate::websocket::relay::ServerConnection;
 
 #[derive(Debug, Clone)]
 pub enum ServerMessage {
