@@ -123,12 +123,12 @@ pub struct ServerData {
 #[derive(Debug, Deserialize)]
 pub struct GetServersResponseMetadata {
     pub current_page: usize,
-    pub from: usize,
+    pub from: Option<usize>,
     pub last_page: usize,
     pub links: IgnoredAny,
     pub path: IgnoredAny,
     pub per_page: usize,
-    pub to: usize,
+    pub to: Option<usize>,
     pub total: usize,
 }
 
