@@ -57,8 +57,11 @@ impl ServerPoolBuilder {
 
         Ok(self)
     }
-
+    
+    #[tracing::instrument(skip(self))]
     pub fn build(self) -> ServerPool {
+        tracing::debug!("Server pool built");
+
         ServerPool {
             servers: RwLock::new(self.servers),
             remote_api: self.remote_api,
@@ -84,9 +87,13 @@ impl ServerPool {
         let map = self.servers.read().await;
 
         match map.get(&uuid) {
-            Some(s) => Ok(Arc::clone(s)),
+            Some(s) => {
+                tracing::debug!("Server {uuid} found");
+                Ok(Arc::clone(s))
+            },
 
             None => {
+                tracing::debug!("Server {uuid} not found, creating");
                 drop(map);
                 self.create_server(uuid).await
             }
@@ -112,7 +119,8 @@ impl ServerPool {
         self.servers.read().await.get(&uuid).cloned()
     }
 }
-
+//TODO: Remove allow(dead_code) when implemented
+#[allow(dead_code)]
 pub struct ServerInfo {
     container: ContainerConfig,
 }
@@ -142,6 +150,8 @@ impl From<IntoStringZst> for String {
     }
 }
 
+//TODO: Remove allow(dead_code) when implemented
+#[allow(dead_code)]
 pub struct Server {
     start_time: Instant,
     uuid: Uuid,
@@ -155,12 +165,14 @@ pub struct Server {
 }
 
 impl Server {
+    #[tracing::instrument(skip(server_info, remote_api, docker))]
     pub async fn new(
         uuid: Uuid,
         server_info: ServerInfo,
         remote_api: Arc<remote::RemoteClient>,
         docker: Arc<Docker>,
     ) -> Result<Arc<Self>, ServerError> {
+        tracing::debug!("Creating new server {uuid}");
         let (send, recv) = channel(128);
 
         let server = Arc::new(Self {
@@ -179,6 +191,8 @@ impl Server {
         tokio::spawn(monitor_performance_metrics(Arc::clone(&server)));
 
         server.create_docker_container().await?;
+
+        tracing::info!("Server {uuid} created");
 
         Ok(server)
     }
@@ -215,6 +229,8 @@ impl Server {
     where
         F: FnOnce(ServerConnection) -> actix_web::Result<(ConnectionAddr, HttpResponse)>,
     {
+        tracing::info!("Setting up new websocket connection");
+
         let id = self.websocket_id_counter.fetch_add(1, Ordering::SeqCst);
 
         // setup the request channel for the websocket
@@ -235,6 +251,9 @@ impl Server {
     }
 
     pub async fn send_to_available_websockets(&self, msg: ServerMessage) {
+        tracing::info!("Sending message to all available websockets");
+        tracing::debug!("message: {:?}", msg);
+
         let lock = self.websockets.read().await;
 
         for sender in lock.values() {
@@ -247,7 +266,10 @@ impl Server {
     }
 }
 
+#[tracing::instrument(skip(server))]
 async fn monitor_performance_metrics(server: Arc<Server>) {
+    tracing::info!("Starting performance metrics monitor for {}", &server.uuid);
+
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 

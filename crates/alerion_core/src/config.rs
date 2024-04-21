@@ -266,6 +266,7 @@ impl From<wings::Config> for AlerionConfig {
 
 impl AlerionConfig {
     pub fn load(project_dirs: &directories::ProjectDirs) -> anyhow::Result<Self> {
+        tracing::info!("Loading Alerion config from {}", project_dirs.config_dir().display());
         let config_path = project_dirs.config_dir().join("config.json");
         let config = std::fs::read_to_string(&config_path).map_err(|e| {
             anyhow::anyhow!(
@@ -276,6 +277,7 @@ impl AlerionConfig {
         })?;
 
         let config: AlerionConfig = serde_json::from_str(&config)?;
+        tracing::debug!("Loaded Alerion config: {:?}", config);
         Ok(config)
     }
 
@@ -290,6 +292,8 @@ impl AlerionConfig {
                 e
             )
         })?;
+
+        tracing::info!("Saved Alerion config to {}", config_path.display());
 
         Ok(())
     }
@@ -308,6 +312,9 @@ impl AlerionConfig {
         })?;
 
         let config: wings::Config = serde_yaml::from_str(&config)?;
+
+        tracing::debug!("Imported Wings config: {:?}", config);
+
         Ok(config.into())
     }
 }
