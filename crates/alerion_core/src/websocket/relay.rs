@@ -17,6 +17,8 @@ impl ServerConnection {
         sender: Sender<(u32, PanelMessage)>,
         id: u32,
     ) -> Self {
+        tracing::debug!("Server connection created with id {}", id);
+
         ServerConnection {
             auth_tracker,
             sender,
@@ -25,24 +27,29 @@ impl ServerConnection {
     }
 
     pub fn set_authenticated(&self) {
+        tracing::debug!("Server connection {} authenticated", self.id);
         self.auth_tracker.set_auth(true);
     }
 
     pub fn is_authenticated(&self) -> bool {
+        tracing::debug!("Checking if server connection {} is authenticated", self.id);
         self.auth_tracker.get_auth()
     }
 
     pub fn send_if_authenticated(&self, msg: PanelMessage) {
+        tracing::debug!("Sending message to server connection {}", self.id);
         if self.auth_tracker.get_auth() {
             let _ = self.sender.try_send((self.id, msg));
         }
     }
 
     pub fn force_send(&self, msg: PanelMessage) {
+        tracing::debug!("Forcing message to server connection {}", self.id);
         let _ = self.sender.try_send((self.id, msg));
     }
 
     pub fn auth_tracker(&self) -> Arc<AuthTracker> {
+        tracing::debug!("Getting auth tracker for server connection {}", self.id);
         Arc::clone(&self.auth_tracker)
     }
 }
@@ -53,7 +60,10 @@ pub struct ClientConnection {
 }
 
 impl ClientConnection {
+    #[tracing::instrument(skip(auth_tracker))]
     pub fn new(auth_tracker: Arc<AuthTracker>, ws_sender: ConnectionAddr) -> Self {
+        tracing::info!("Client connection created");
+
         Self {
             auth_tracker,
             ws_sender,
@@ -82,12 +92,16 @@ impl ClientConnection {
     ///
     /// This would easily be fixable with another atomic check, but I'd rather avoid
     /// seemingly unnecessary atomic loads.
+    #[tracing::instrument(skip(self), fields(id=format!("{:?}", self.ws_sender)))]
     pub fn terminate(&self) {
+        tracing::info!("Terminating websocket connection");
         self.expire_auth();
         self.ws_sender.do_send(ServerMessage::Kill);
     }
 
+    #[tracing::instrument(skip(self), fields(id=format!("{:?}", self.ws_sender)))]
     pub fn expire_auth(&self) {
+        tracing::debug!("Auth expired.");
         self.auth_tracker.set_auth(false);
     }
 
@@ -98,6 +112,7 @@ impl ClientConnection {
 
 /// A middleman between a websocket connection and a server, which keeps track of
 /// auth state and the status of the websocket connection.
+#[allow(dead_code)]
 pub struct AuthTracker {
     started_at: AtomicU64,
     authenticated: AtomicBool,

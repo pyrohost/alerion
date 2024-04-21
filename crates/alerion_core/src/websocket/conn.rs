@@ -35,6 +35,8 @@ impl actix::Message for PanelMessage {
 
 pub type ConnectionAddr = Addr<WebsocketConnectionImpl>;
 
+//TODO: Remove allow(dead_code) when implemented
+#[allow(dead_code)]
 enum MessageError {
     InvalidJwt,
     Generic(String),
@@ -101,6 +103,10 @@ impl WebsocketConnectionImpl {
             auth: Auth::from_config(cfg),
             permissions: Cell::new(Permissions::empty()),
         }
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.server_uuid
     }
 
     pub fn handle_text(&self, msg: &str, ctx: &mut <Self as Actor>::Context) -> Option<()> {
