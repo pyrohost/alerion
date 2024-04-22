@@ -1,0 +1,13 @@
+[package]
+name = "client_mock"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+poem = "3.0.0"
+serde = { version = "1.0.198", features = ["derive"] }
+serde_json = "1.0.116"
+tokio = { version = "1.37.0", features = ["rt-multi-thread"] }
+uuid = { version = "1.8.0", features = ["v4", "serde"] }
