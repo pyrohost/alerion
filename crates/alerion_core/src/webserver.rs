@@ -2,8 +2,8 @@ use std::net::SocketAddr;
 
 use warp::Filter;
 
-const ALLOWED_HEADERS: &str = "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token";
-const ALLOWED_METHODS: &str = "GET, POST, PATCH, PUT, DELETE, OPTIONS";
+//const ALLOWED_HEADERS: &str = "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token";
+//const ALLOWED_METHODS: &str = "GET, POST, PATCH, PUT, DELETE, OPTIONS";
 
 //fn default_headers(config: &AlerionConfig) -> middleware::DefaultHeaders {
 //middleware::DefaultHeaders::new()
