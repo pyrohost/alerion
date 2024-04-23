@@ -1,9 +1,12 @@
 #![deny(clippy::unwrap_used)]
 
+use std::sync::Arc;
+
 use config::AlerionConfig;
 use futures::stream::{FuturesUnordered, StreamExt};
 
 use crate::filesystem::setup_directories;
+use crate::servers::ServerPool;
 
 pub fn splash() {
     println!(
@@ -35,13 +38,13 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     let project_dirs = setup_directories().await?;
     let config = AlerionConfig::load(&project_dirs)?;
 
-    //let server_pool = Arc::new(ServerPool::builder(&config)?.fetch_servers().await?.build());
+    let server_pool = Arc::new(ServerPool::new(&config).await?);
 
     //server_pool.create_server("0e4059ca-d79b-46a5-8ec4-95bd0736d150".try_into().unwrap()).await;
 
     let webserver_handle = tokio::spawn(async move {
         let cfg = config.clone();
-        let result = webserver::serve(&cfg).await;
+        let result = webserver::serve(&cfg, Arc::clone(&server_pool)).await;
 
         match result {
             Ok(()) => tracing::info!("webserver exited gracefully"),

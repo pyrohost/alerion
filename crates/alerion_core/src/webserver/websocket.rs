@@ -9,13 +9,13 @@ use tokio::sync::mpsc;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-struct RecvWebsocketEvent {
+pub struct RecvWebsocketEvent {
     event: RecvEventType,
     args: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SendWebSocketEvent {
+pub struct SendWebsocketEvent {
     event: SendEventType,
     args: Option<Vec<String>>,
 }
@@ -82,7 +82,7 @@ pub enum SendEventType {
 }
 
 
-pub async fn websocket_handler(stream: WebSocketStream, uuid: Uuid) {
+pub async fn websocket_handler(stream: WebSocketStream, _recv: mpsc::Receiver<SendWebsocketEvent>, uuid: Uuid) {
     let (sink, mut stream) = stream.split();
     let sink = Arc::new(Mutex::new(sink));
 
