@@ -4,6 +4,9 @@ description = "Core alerion functionality"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+wings_compat = []
+
 [dependencies]
 alerion_datamodel = { version = "0.1.0", path = "../alerion_datamodel" }
 env_logger = "0.11.3"
