@@ -33,8 +33,6 @@ impl<E: Endpoint> Endpoint for BearerAuthMiddlewareImpl<E> {
     type Output = E::Output;
 
     async fn call(&self, req: Request) -> poem::Result<Self::Output> {
-        println!("{req:#?}");
-
         if req.method() == Method::OPTIONS {
             return self.ep.call(req).await;
         }
