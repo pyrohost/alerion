@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -8,10 +8,12 @@ use bollard::container::{Config, CreateContainerOptions};
 use bollard::Docker;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::config::AlerionConfig;
+use crate::webserver::websocket::SendWebsocketEvent;
 
 pub struct ServerPool {
     servers: RwLock<HashMap<Uuid, Arc<Server>>>,
@@ -121,6 +123,7 @@ pub struct Server {
     uuid: Uuid,
     container_name: String,
     websocket_id_counter: AtomicU32,
+    websocket_connections: Mutex<HashMap<u32, mpsc::Sender<SendWebsocketEvent>>>,
     server_info: ServerInfo,
     remote_api: Arc<remote::RemoteClient>,
     docker: Arc<Docker>,
@@ -141,6 +144,7 @@ impl Server {
             uuid,
             container_name: format!("{}_container", uuid.as_hyphenated()),
             websocket_id_counter: AtomicU32::new(0),
+            websocket_connections: Mutex::new(HashMap::new()),
             server_info,
             remote_api,
             docker,
@@ -152,6 +156,20 @@ impl Server {
 
         Ok(server)
     }
+
+    pub async fn add_websocket_connection(&self) -> mpsc::Receiver<SendWebsocketEvent> {
+        let id = self.websocket_id_counter.fetch_add(1, Ordering::SeqCst);
+
+        let (send, recv) = mpsc::channel(64);
+
+        self.websocket_connections
+            .lock()
+            .await
+            .insert(id, send);
+
+        recv
+    }
+
 
     async fn create_docker_container(&self) -> Result<(), ServerError> {
         tracing::info!(

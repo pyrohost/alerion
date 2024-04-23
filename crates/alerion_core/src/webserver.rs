@@ -5,7 +5,7 @@ use std::io;
 use poem::listener::TcpListener;
 use poem::middleware::Cors;
 use poem::web::websocket::WebSocket;
-use poem::web::{Json, Path};
+use poem::web::{Data, Json, Path};
 use poem::{endpoint, get, handler, EndpointExt, IntoResponse, Route, Server};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -42,13 +42,23 @@ async fn get_system_info() -> impl IntoResponse {
 }
 
 #[handler]
-async fn initialize_websocket(Path(uuid): Path<Uuid>, ws: WebSocket) -> impl IntoResponse {
-    ws.on_upgrade(move |mut socket| {
-        websocket::websocket_handler(socket, uuid)
-    })
+async fn initialize_websocket(
+    Path(uuid): Path<Uuid>, 
+    Data(server_pool): Data<&Arc<ServerPool>>,
+    ws: WebSocket,
+) -> impl IntoResponse {
+    if let Some(server) = server_pool.get_server(uuid).await {
+        let recv = server.add_websocket_connection().await;
+
+        ws.on_upgrade(move |mut socket| {
+            websocket::websocket_handler(socket, recv, uuid)
+        }).into_response()
+    } else {
+        StatusCode::NOT_FOUND.into_response()
+    }
 }
 
-pub async fn serve(config: &AlerionConfig) -> io::Result<()> {
+pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::Result<()> {
     // TODO: restrict origins
     let cors = Cors::new().allow_credentials(true);
 
@@ -59,13 +69,14 @@ pub async fn serve(config: &AlerionConfig) -> io::Result<()> {
     let ws_endpoint = get(initialize_websocket);
 
     let api = Route::new()
-        .nest_no_strip(
+        .nest(
             "api",
             Route::new()
                 .at("system", system_endpoint)
                 .at("servers/:uuid/ws", ws_endpoint),
         )
-        .with(cors);
+        .with(cors)
+        .data(server_pool);
 
     Server::new(TcpListener::bind((config.api.host, config.api.port)))
         .run(api)
