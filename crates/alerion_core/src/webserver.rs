@@ -1,6 +1,7 @@
 #![deny(dead_code)]
 use std::collections::HashSet;
 use std::env::consts::{ARCH, OS};
+use std::io;
 
 use bitflags::bitflags;
 use futures::{SinkExt, StreamExt};
@@ -265,7 +266,7 @@ async fn return_auth_details(Path(_identifier): Path<String>) -> impl IntoRespon
     todo!()
 }
 
-pub async fn serve(config: AlerionConfig) {
+pub async fn serve(config: AlerionConfig) -> io::Result<()> {
     let system_endpoint = get(process_system_query)
         .options(endpoint::make_sync(|_| StatusCode::NO_CONTENT))
         .with(Cors::new().allow_credentials(true))
@@ -279,9 +280,9 @@ pub async fn serve(config: AlerionConfig) {
         ),
     );
 
-    let _ = Server::new(TcpListener::bind((config.api.host, config.api.port)))
+    Server::new(TcpListener::bind((config.api.host, config.api.port)))
         .run(api)
-        .await;
+        .await
 }
 
 pub mod middleware;
