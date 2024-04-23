@@ -26,11 +26,15 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     //server_pool.create_server("0e4059ca-d79b-46a5-8ec4-95bd0736d150".try_into().unwrap()).await;
 
-    // there is a low likelyhood this will actually block, and if it does
-    // it will block only once for a short amount of time, so it's no big deal.
-    let webserver = webserver::serve(config);
+    let webserver_handle = tokio::spawn(async move {
+        let cfg = config.clone();
+        let result =  webserver::serve(cfg).await;
 
-    let webserver_handle = tokio::spawn(webserver);
+        match result {
+            Ok(()) => tracing::info!("webserver exited gracefully"),
+            Err(e) => tracing::error!("webserver exited with an error: {e}"),
+        }
+    });
 
     let mut handles = FuturesUnordered::new();
     handles.push(webserver_handle);
