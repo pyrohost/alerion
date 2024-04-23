@@ -28,7 +28,7 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     // there is a low likelyhood this will actually block, and if it does
     // it will block only once for a short amount of time, so it's no big deal.
-    let webserver = webserver::serve((config.api.host, config.api.port));
+    let webserver = webserver::serve(config);
 
     let webserver_handle = tokio::spawn(webserver);
 

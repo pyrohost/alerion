@@ -1,15 +1,24 @@
+#![deny(dead_code)]
+use std::collections::HashSet;
 use std::env::consts::{ARCH, OS};
 use std::net::SocketAddr;
 
+use bitflags::bitflags;
 use futures::{SinkExt, StreamExt};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use poem::listener::TcpListener;
+use poem::middleware::Cors;
 use poem::web::websocket::{Message, WebSocket};
-use poem::web::{Path, Query};
-use poem::{get, handler, Body, IntoResponse, Response, Route, Server};
-use reqwest::StatusCode;
+use poem::web::Path;
+use poem::{
+    get, handler, Body, Endpoint, EndpointExt, IntoResponse, Middleware, Request, Response, Route, Server
+};
+use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use uuid::Uuid;
+
+use crate::config::AlerionConfig;
 
 //const ALLOWED_HEADERS: &str = "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token";
 //const ALLOWED_METHODS: &str = "GET, POST, PATCH, PUT, DELETE, OPTIONS";
@@ -22,6 +31,119 @@ use uuid::Uuid;
 //.add((header::ACCESS_CONTROL_ALLOW_METHODS, ALLOWED_METHODS))
 //.add((header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
 //}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Claims {
+    iss: String,
+    aud: Vec<String>,
+    jti: String,
+    iat: usize,
+    nbf: usize,
+    exp: usize,
+    server_uuid: Uuid,
+    permissions: Vec<String>,
+    user_uuid: Uuid,
+    user_id: usize,
+    unique_id: String,
+}
+
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    pub struct Permissions: u32 {
+        const CONNECT = 1;
+        const START = 1 << 1;
+        const STOP = 1 << 2;
+        const RESTART = 1 << 3;
+        const CONSOLE = 1 << 4;
+        const BACKUP_READ = 1 << 5;
+        const ADMIN_ERRORS = 1 << 6;
+        const ADMIN_INSTALL = 1 << 7;
+        const ADMIN_TRANSFER = 1 << 8;
+    }
+}
+
+impl Permissions {
+    pub fn from_strings(strings: &[impl AsRef<str>]) -> Self {
+        let mut this = Permissions::empty();
+
+        for s in strings {
+            match s.as_ref() {
+                "*" => {
+                    this.insert(Permissions::CONNECT);
+                    this.insert(Permissions::START);
+                    this.insert(Permissions::STOP);
+                    this.insert(Permissions::RESTART);
+                    this.insert(Permissions::CONSOLE);
+                    this.insert(Permissions::BACKUP_READ);
+                }
+                "websocket.connect" => {
+                    this.insert(Permissions::CONNECT);
+                }
+                "control.start" => {
+                    this.insert(Permissions::START);
+                }
+                "control.stop" => {
+                    this.insert(Permissions::STOP);
+                }
+                "control.restart" => {
+                    this.insert(Permissions::RESTART);
+                }
+                "control.console" => {
+                    this.insert(Permissions::CONSOLE);
+                }
+                "backup.read" => {
+                    this.insert(Permissions::BACKUP_READ);
+                }
+                "admin.websocket.errors" => {
+                    this.insert(Permissions::ADMIN_ERRORS);
+                }
+                "admin.websocket.install" => {
+                    this.insert(Permissions::ADMIN_INSTALL);
+                }
+                "admin.websocket.transfer" => {
+                    this.insert(Permissions::ADMIN_TRANSFER);
+                }
+                _ => {}
+            }
+        }
+
+        this
+    }
+}
+
+pub struct Auth {
+    validation: Validation,
+    key: DecodingKey,
+}
+
+impl Auth {
+    pub fn from_config(cfg: &AlerionConfig) -> Self {
+        let mut validation = Validation::new(Algorithm::HS256);
+
+        let spec_claims = ["exp", "nbf", "aud", "iss"].map(ToOwned::to_owned);
+
+        validation.required_spec_claims = HashSet::from(spec_claims);
+        validation.leeway = 10;
+        validation.reject_tokens_expiring_in_less_than = 0;
+        validation.validate_exp = false;
+        validation.validate_nbf = false;
+        validation.validate_aud = false;
+        validation.aud = None;
+        validation.iss = Some(HashSet::from([cfg.remote.clone()]));
+        validation.sub = None;
+
+        let key = DecodingKey::from_secret(cfg.auth.token.as_ref());
+
+        Self { validation, key }
+    }
+
+    pub fn validate(&self, auth: &str, server_uuid: &Uuid) -> Option<Permissions> {
+        jsonwebtoken::decode::<Claims>(auth, &self.key, &self.validation)
+            .ok()
+            .filter(|result| &result.claims.server_uuid == server_uuid)
+            .map(|result| Permissions::from_strings(&result.claims.permissions))
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SystemQuery {
@@ -38,65 +160,30 @@ struct SystemResponseV1 {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SystemResponseV2 {
-    version: String,
-    docker: DockerInfo,
-    system: SystemInfo,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct DockerInfo {
-    version: String,
-    cgroups: CGroupsInfo,
-    containers: ContainersInfo,
-    storage: StorageInfo,
-    runc: RunCInfo,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct CGroupsInfo {
-    driver: String,
-    version: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ContainersInfo {
-    total: u32,
-    running: u32,
-    paused: u32,
-    stopped: u32,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct StorageInfo {
-    driver: String,
-    filesystem: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct RunCInfo {
-    version: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct SystemInfo {
-    architecture: String,
-    cpu_threads: usize,
-    memory_bytes: usize,
-    kernel_version: String,
-    os: String,
-    os_type: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct WebSocketEvent {
-    event: String,
+struct WebsocketEvent {
+    event: ServerEventType,
     args: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum EventType {
-    // Send
+struct ClientWebSocketEvent {
+    event: ClientEventType,
+    args: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AuthDetails {
+    data: AuthDetailsInner,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AuthDetailsInner {
+    token: String,
+    socket: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ClientEventType {
     #[serde(rename = "auth")]
     Auth,
     #[serde(rename = "set state")]
@@ -107,8 +194,10 @@ pub enum EventType {
     SendLogs,
     #[serde(rename = "send stats")]
     SendStats,
+}
 
-    // Recieve
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ServerEventType {
     #[serde(rename = "auth success")]
     AuthSuccess,
     #[serde(rename = "backup complete")]
@@ -144,66 +233,132 @@ pub enum EventType {
 }
 
 #[handler]
-fn process_system_query(Query(params): Query<SystemQuery>) -> impl IntoResponse {
-    match params.v.as_deref() {
-        Some("2") => Response::builder()
-            .status(StatusCode::NOT_IMPLEMENTED)
-            .finish(),
-        Some(_) => Response::builder()
-            .status(StatusCode::BAD_REQUEST)
-            .body("Invalid version"),
-        None => {
-            let Some(kernel_version) = System::kernel_version() else {
-                return Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body("The system information could not be fetched.");
+async fn process_system_query() -> impl IntoResponse {
+    let Some(kernel_version) = System::kernel_version() else {
+        return Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body("The system information could not be fetched.");
+    };
+
+    let Ok(response) = Body::from_json(SystemResponseV1 {
+        architecture: ARCH.to_owned(),
+        cpu_count: num_cpus::get(),
+        kernel_version,
+        os: OS.to_owned(),
+        version: env!("CARGO_PKG_VERSION").to_owned(),
+    }) else {
+        return Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .finish();
+    };
+
+    Response::builder().body(response)
+}
+
+#[handler]
+async fn initialize_websocket(Path(_uuid): Path<Uuid>, ws: WebSocket) -> impl IntoResponse {
+    ws.on_upgrade(move |mut socket| async move {
+        while let Some(Ok(Message::Text(text))) = socket.next().await {
+            let data = serde_json::from_str::<ClientWebSocketEvent>(text.as_str());
+
+            let response = match data {
+                Ok(json) => Message::Text(match json.event {
+                    ClientEventType::Auth => "auth success".to_owned(),
+                    _ => "not implemented".to_owned(),
+                }),
+                Err(e) => Message::Text(format!("error: {e}")),
             };
 
-            let Ok(response) = Body::from_json(SystemResponseV1 {
-                architecture: ARCH.to_owned(),
-                cpu_count: num_cpus::get(),
-                kernel_version,
-                os: OS.to_owned(),
-                version: env!("CARGO_PKG_VERSION").to_owned(),
-            }) else {
-                return Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .finish();
-            };
+            let _ = socket.send(response).await;
+        }
+    })
+}
 
-            Response::builder().body(response)
+#[handler]
+async fn return_auth_details(Path(_identifier): Path<String>) -> impl IntoResponse {
+    todo!()
+}
+
+struct TokenMiddleware {
+    token: String,
+}
+
+impl<E: Endpoint> Middleware<E> for TokenMiddleware {
+    type Output = TokenMiddlewareImpl<E>;
+
+    fn transform(&self, ep: E) -> Self::Output {
+        TokenMiddlewareImpl {
+            ep,
+            token: self.token.clone(),
+        }
+    }
+}
+
+/// The new endpoint type generated by the TokenMiddleware.
+struct TokenMiddlewareImpl<E> {
+    ep: E,
+    token: String,
+}
+
+/// Token data
+impl<E: Endpoint> Endpoint for TokenMiddlewareImpl<E> {
+    type Output = E::Output;
+
+    async fn call(&self, req: Request) -> poem::Result<Self::Output> {
+        if req.method() == Method::OPTIONS {
+            return self.ep.call(req).await;
+        }
+
+        if let Some(value) = req
+            .headers()
+            .get("Authorization")
+            .and_then(|value| value.to_str().ok())
+        {
+            let token = value.to_string();
+
+            if token == format!("Bearer {}", self.token) {
+                self.ep.call(req).await
+            } else {
+                Err(poem::Error::from_string(
+                    "Token does not match",
+                    StatusCode::UNAUTHORIZED,
+                ))
+            }
+        } else {
+            Err(poem::Error::from_string(
+                "No token provided",
+                StatusCode::UNAUTHORIZED,
+            ))
         }
     }
 }
 
 #[handler]
-async fn initialize_websocket(Path(uuid): Path<Uuid>, ws: WebSocket) -> impl IntoResponse {
-    ws.on_upgrade(move |mut socket| async move {
-        loop {
-            if let Some(Ok(Message::Text(text))) = socket.next().await {
-                let _ = socket.send(Message::Text(format!("{uuid}"))).await;
-                let _ = socket
-                    .send(Message::Text(
-                        match serde_json::from_str::<WebSocketEvent>(text.as_str()) {
-                            Ok(json) => format!("{json:?}"),
-                            Err(e) => format!("error: {e}"),
-                        },
-                    ))
-                    .await;
-            }
-        }
-    })
+async fn system_query_options() -> impl IntoResponse {
+    Response::builder().status(StatusCode::NO_CONTENT).finish()
 }
 
-pub async fn serve(address: impl Into<SocketAddr>) {
+pub async fn serve(config: AlerionConfig) {
+    let system_endpoint = get(process_system_query)
+        .options(system_query_options)
+        .with(
+            Cors::new()
+                .allow_methods(["GET", "OPTIONS"])
+                .allow_credentials(true),
+        )
+        .with(TokenMiddleware {
+            token: config.auth.token,
+        });
+
     let api = Route::new().nest(
-        "/api",
-        Route::new()
-            .at("system", get(process_system_query))
-            .at("servers/:uuid/ws", get(initialize_websocket)),
+        "api",
+        Route::new().at("system", system_endpoint).nest(
+            "servers",
+            Route::new().at(":uuid/ws", get(initialize_websocket)),
+        ),
     );
 
-    let _ = Server::new(TcpListener::bind(address.into()))
+    let _ = Server::new(TcpListener::bind((config.api.host, config.api.port)))
         .run(api)
         .await;
 }
