@@ -23,7 +23,8 @@ the terms of the PSAL. If you don't agree to the terms of
 the PSAL, you are not permitted to use this software. 
 
 License: https://github.com/pyrohost/legal/blob/main/licenses/PSAL.md
-Source code: https://github.com/pyrohost/alerion");
+Source code: https://github.com/pyrohost/alerion"
+    );
 }
 
 /// Alerion main entrypoint. Expects a tokio runtime to be setup.
@@ -67,4 +68,3 @@ pub mod filesystem;
 pub mod servers;
 pub mod webserver;
 pub mod websocket;
-
