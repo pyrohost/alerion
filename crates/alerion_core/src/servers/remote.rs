@@ -49,8 +49,6 @@ impl RemoteClient {
 
         headers.insert(header::ACCEPT, accept);
 
-        tracing::info!("{}", config.remote);
-
         Ok(Self {
             remote: config.remote.clone(),
             http: reqwest::Client::builder()
@@ -180,8 +178,6 @@ impl RemoteClient {
             };
 
             let mut parsed = parsed?;
-
-            tracing::debug!("{parsed:#?}");
 
             let server_data = mem::take(&mut parsed.data);
 
