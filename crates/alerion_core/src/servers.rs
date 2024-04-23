@@ -13,30 +13,37 @@ use uuid::Uuid;
 
 use crate::config::AlerionConfig;
 
-pub struct ServerPoolBuilder {
-    servers: HashMap<Uuid, Arc<Server>>,
+pub struct ServerPool {
+    servers: RwLock<HashMap<Uuid, Arc<Server>>>,
     remote_api: Arc<remote::RemoteClient>,
     docker: Arc<Docker>,
 }
 
-impl ServerPoolBuilder {
-    pub fn from_config(config: &AlerionConfig) -> Result<Self, ServerError> {
-        let docker = Arc::new(Docker::connect_with_defaults()?);
+impl ServerPool {
+    #[tracing::instrument(skip(config))]
+    pub async fn new(config: &AlerionConfig) -> Result<Self, ServerError> {
+        tracing::info!("Initializing managed servers...");
+
+        let remote_api = remote::RemoteClient::new(config)?;
+
+        tracing::info!("Initiating connection to Docker Engine");
+        let docker = Docker::connect_with_defaults()?;
 
         Ok(Self {
-            servers: HashMap::new(),
-            remote_api: Arc::new(remote::RemoteClient::new(config)?),
-            docker,
+            servers: RwLock::new(HashMap::new()),
+            remote_api: Arc::new(remote_api),
+            docker: Arc::new(docker),
         })
     }
 
-    pub async fn fetch_servers(mut self) -> Result<ServerPoolBuilder, ServerError> {
+    #[tracing::instrument(skip(self))]
+    pub async fn fetch_existing_servers(&self) -> Result<(), ServerError> {
         tracing::info!("Fetching existing servers on this node");
 
         let servers = self.remote_api.get_servers().await?;
 
         for s in servers {
-            tracing::info!("Adding server {}", s.uuid);
+            tracing::info!("Adding server {}...", s.uuid);
 
             let uuid = s.uuid;
             let info = ServerInfo::from_remote_info(s.settings);
@@ -47,60 +54,21 @@ impl ServerPoolBuilder {
                 Arc::clone(&self.docker),
             )
             .await?;
-            self.servers.insert(uuid, server);
+
+            self.servers.write().await.insert(uuid, server);
         }
 
-        Ok(self)
+        Ok(())
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn build(self) -> ServerPool {
-        tracing::debug!("Server pool built");
-
-        ServerPool {
-            servers: RwLock::new(self.servers),
-            remote_api: self.remote_api,
-            docker: self.docker,
-        }
-    }
-}
-
-pub struct ServerPool {
-    servers: RwLock<HashMap<Uuid, Arc<Server>>>,
-    remote_api: Arc<remote::RemoteClient>,
-    docker: Arc<Docker>,
-}
-
-impl ServerPool {
-    pub fn builder(config: &AlerionConfig) -> Result<ServerPoolBuilder, ServerError> {
-        ServerPoolBuilder::from_config(config)
-    }
-
-    pub async fn get_or_create_server(&self, uuid: Uuid) -> Result<Arc<Server>, ServerError> {
-        // initially try to read, because most of the times we'll only need to read
-        // and we can therefore reduce waiting by a lot using a read-write lock.
-        let map = self.servers.read().await;
-
-        match map.get(&uuid) {
-            Some(s) => {
-                tracing::debug!("Server {uuid} found");
-                Ok(Arc::clone(s))
-            }
-
-            None => {
-                tracing::debug!("Server {uuid} not found, creating");
-                drop(map);
-                self.create_server(uuid).await
-            }
-        }
-    }
-
-    pub async fn create_server(&self, uuid: Uuid) -> Result<Arc<Server>, ServerError> {
-        tracing::info!("Creating server {uuid}");
+    pub async fn register_server(&self, uuid: Uuid) -> Result<Arc<Server>, ServerError> {
+        tracing::info!("Adding server {uuid}...");
 
         let remote_api = Arc::clone(&self.remote_api);
         let docker = Arc::clone(&self.docker);
 
+        tracing::debug!("Fetching server configuration from remote");
         let config = remote_api.get_server_configuration(uuid).await?;
         let server_info = ServerInfo::from_remote_info(config.settings);
 
@@ -114,6 +82,7 @@ impl ServerPool {
         self.servers.read().await.get(&uuid).cloned()
     }
 }
+
 //TODO: Remove allow(dead_code) when implemented
 #[allow(dead_code)]
 pub struct ServerInfo {
