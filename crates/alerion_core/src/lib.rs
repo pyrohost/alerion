@@ -1,21 +1,34 @@
 #![deny(clippy::unwrap_used)]
 
-pub mod config;
-pub mod filesystem;
-pub mod logging;
-pub mod servers;
-pub mod webserver;
-pub mod websocket;
-
 use config::AlerionConfig;
 use futures::stream::{FuturesUnordered, StreamExt};
 
 use crate::filesystem::setup_directories;
 
+pub fn splash() {
+    println!(
+        "
+
+ █████  ██      ███████ ██████  ██  ██████  ███    ██ 
+██   ██ ██      ██      ██   ██ ██ ██    ██ ████   ██ 
+███████ ██      █████   ██████  ██ ██    ██ ██ ██  ██ 
+██   ██ ██      ██      ██   ██ ██ ██    ██ ██  ██ ██ 
+██   ██ ███████ ███████ ██   ██ ██  ██████  ██   ████
+
+Copyright (c) 2024 Pyro Host Inc. All Right Reserved.
+
+Pyro Alerion is licensed under the Pyro Source Available
+License (PSAL). Your use of this software is governed by
+the terms of the PSAL. If you don't agree to the terms of
+the PSAL, you are not permitted to use this software. 
+
+License: https://github.com/pyrohost/legal/blob/main/licenses/PSAL.md
+Source code: https://github.com/pyrohost/alerion");
+}
+
 /// Alerion main entrypoint. Expects a tokio runtime to be setup.
 pub async fn alerion_main() -> anyhow::Result<()> {
-    logging::splash();
-    //logging::setup();
+    splash();
 
     tracing::info!("Starting Alerion");
 
@@ -48,3 +61,10 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+pub mod config;
+pub mod filesystem;
+pub mod servers;
+pub mod webserver;
+pub mod websocket;
+
