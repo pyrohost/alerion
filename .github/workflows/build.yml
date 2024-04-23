@@ -111,7 +111,7 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "team@pyro.host"
           
-          if [ `git status --porcelain` ]; then git commit -am "refactor: rustfmt [skip ci]" && git push; fi
+          if [ "`git status --porcelain`" ]; then git commit -am "refactor: rustfmt [skip ci]" && git push; fi
 
       - name: Set up cache
         uses: actions/cache/restore@v4
