@@ -8,8 +8,7 @@ use bollard::container::{Config, CreateContainerOptions};
 use bollard::Docker;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::sync::{Mutex, RwLock};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::config::AlerionConfig;
@@ -160,14 +159,10 @@ impl Server {
 
         let (send, recv) = mpsc::channel(64);
 
-        self.websocket_connections
-            .lock()
-            .await
-            .insert(id, send);
+        self.websocket_connections.lock().await.insert(id, send);
 
         recv
     }
-
 
     async fn create_docker_container(&self) -> Result<(), ServerError> {
         tracing::info!(

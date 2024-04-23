@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use std::env::consts::{ARCH, OS};
 use std::io;
+use std::sync::Arc;
 
 use poem::listener::TcpListener;
 use poem::middleware::Cors;
@@ -43,16 +43,15 @@ async fn get_system_info() -> impl IntoResponse {
 
 #[handler]
 async fn initialize_websocket(
-    Path(uuid): Path<Uuid>, 
+    Path(uuid): Path<Uuid>,
     Data(server_pool): Data<&Arc<ServerPool>>,
     ws: WebSocket,
 ) -> impl IntoResponse {
     if let Some(server) = server_pool.get_server(uuid).await {
         let recv = server.add_websocket_connection().await;
 
-        ws.on_upgrade(move |mut socket| {
-            websocket::websocket_handler(socket, recv, uuid)
-        }).into_response()
+        ws.on_upgrade(move |mut socket| websocket::websocket_handler(socket, recv, uuid))
+            .into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
     }

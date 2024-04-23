@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
-use futures::stream::SplitSink;
-use futures::stream::StreamExt;
-use uuid::Uuid;
+use futures::stream::{SplitSink, StreamExt};
 use poem::web::websocket::{Message, WebSocketStream};
-use tokio::sync::Mutex;
-use tokio::sync::mpsc;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use tokio::sync::{mpsc, Mutex};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RecvWebsocketEvent {
@@ -81,8 +79,11 @@ pub enum SendEventType {
     TransferStatus,
 }
 
-
-pub async fn websocket_handler(stream: WebSocketStream, _recv: mpsc::Receiver<SendWebsocketEvent>, uuid: Uuid) {
+pub async fn websocket_handler(
+    stream: WebSocketStream,
+    _recv: mpsc::Receiver<SendWebsocketEvent>,
+    uuid: Uuid,
+) {
     let (sink, mut stream) = stream.split();
     let sink = Arc::new(Mutex::new(sink));
 
