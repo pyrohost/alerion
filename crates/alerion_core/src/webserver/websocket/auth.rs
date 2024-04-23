@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
-use uuid::Uuid;
 use bitflags::bitflags;
-use serde::{Serialize, Deserialize};
-use jsonwebtoken::{DecodingKey, Algorithm, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::config::AlerionConfig;
 
@@ -119,4 +119,3 @@ impl Auth {
             .map(|result| Permissions::from_strings(&result.claims.permissions))
     }
 }
-
