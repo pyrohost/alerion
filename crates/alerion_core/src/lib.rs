@@ -41,7 +41,7 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     let webserver_handle = tokio::spawn(async move {
         let cfg = config.clone();
-        let result = webserver::serve(cfg).await;
+        let result = webserver::serve(&cfg).await;
 
         match result {
             Ok(()) => tracing::info!("webserver exited gracefully"),
