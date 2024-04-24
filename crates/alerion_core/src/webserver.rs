@@ -2,11 +2,12 @@ use std::env::consts::{ARCH, OS};
 use std::io;
 use std::sync::Arc;
 
+use alerion_datamodel::webserver::CreateServerRequest;
 use poem::listener::TcpListener;
 use poem::middleware::{Tracing, Cors};
 use poem::web::websocket::WebSocket;
 use poem::web::{Data, Json, Path};
-use poem::{endpoint, get, handler, EndpointExt, IntoResponse, Route, Server};
+use poem::{endpoint, get, handler, post, Body, EndpointExt, IntoResponse, Route, Server};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
@@ -57,6 +58,23 @@ async fn initialize_websocket(
     }
 }
 
+#[handler]
+async fn create_server(Json(options): Json<CreateServerRequest>, Data(server_pool): Data<&Arc<ServerPool>>) -> impl IntoResponse {
+    let server = match server_pool.get_server(options.uuid).await {
+        Some(s) => s,
+        None => {
+            let server_fut = server_pool.register_server(options.uuid, options.start_on_completion);
+            let Ok(server) = server_fut.await else {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            };
+
+            server
+        }
+    };
+
+    ().into_response()
+}
+
 pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::Result<()> {
     // TODO: restrict origins
     let cors = Cors::new().allow_credentials(true);
@@ -67,11 +85,15 @@ pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::
 
     let ws_endpoint = get(initialize_websocket);
 
+    let install_endpoint = post(create_server)
+        .with(BearerAuthMiddleware::new(config.auth.token.clone()));
+
     let api = Route::new()
         .nest(
             "api",
             Route::new()
                 .at("system", system_endpoint)
+                .at("servers", install_endpoint)
                 .at("servers/:uuid/ws", ws_endpoint),
         )
         .with(cors)
