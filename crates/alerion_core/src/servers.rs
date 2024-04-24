@@ -14,6 +14,14 @@ use uuid::Uuid;
 use crate::config::AlerionConfig;
 use crate::webserver::websocket::SendWebsocketEvent;
 
+#[derive(Debug, Error)]
+pub enum ServerError {
+    #[error("docker error: {0}")]
+    Docker(#[from] bollard::errors::Error),
+    #[error("panel remote API error: {0}")]
+    RemoteApi(#[from] remote::ResponseError),
+}
+
 pub struct ServerPool {
     servers: RwLock<HashMap<Uuid, Arc<Server>>>,
     remote_api: Arc<remote::RemoteClient>,
@@ -63,7 +71,7 @@ impl ServerPool {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn register_server(&self, uuid: Uuid) -> Result<Arc<Server>, ServerError> {
+    pub async fn register_server(&self, uuid: Uuid, start: bool) -> Result<Arc<Server>, ServerError> {
         tracing::info!("Adding server {uuid}...");
 
         let remote_api = Arc::clone(&self.remote_api);
@@ -96,14 +104,6 @@ impl ServerInfo {
             container: server_settings.container,
         }
     }
-}
-
-#[derive(Debug, Error)]
-pub enum ServerError {
-    #[error("docker error: {0}")]
-    Docker(#[from] bollard::errors::Error),
-    #[error("panel remote API error: {0}")]
-    RemoteApi(#[from] remote::ResponseError),
 }
 
 #[derive(Serialize, Deserialize, Default, Copy, Clone, PartialEq, Eq, Hash)]
@@ -149,10 +149,6 @@ impl Server {
             docker,
         });
 
-        server.create_docker_container().await?;
-
-        tracing::info!("Server {uuid} created");
-
         Ok(server)
     }
 
@@ -166,7 +162,7 @@ impl Server {
         recv
     }
 
-    async fn create_docker_container(&self) -> Result<(), ServerError> {
+    async fn create_docker_container(&self) -> Result<String, ServerError> {
         tracing::info!(
             "Creating docker container for server {}",
             self.uuid.as_hyphenated()
@@ -186,9 +182,9 @@ impl Server {
 
         let response = self.docker.create_container(Some(opts), config).await?;
 
-        tracing::debug!("{response:#?}");
+        tracing::debug!("Created docker container: {response:#?}");
 
-        Ok(())
+        Ok(response.id)
     }
 
     pub fn server_time(&self) -> u64 {
