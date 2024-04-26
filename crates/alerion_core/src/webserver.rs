@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use self::middleware::bearer_auth::BearerAuthMiddleware;
 use crate::config::AlerionConfig;
-use crate::servers::ServerPool;
+use crate::servers::pool::ServerPool;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SystemResponseV1 {

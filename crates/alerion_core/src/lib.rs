@@ -6,7 +6,7 @@ use config::AlerionConfig;
 use futures::stream::{FuturesUnordered, StreamExt};
 
 use crate::filesystem::setup_directories;
-use crate::servers::ServerPool;
+use crate::servers::pool::ServerPool;
 
 pub fn splash() {
     println!(
