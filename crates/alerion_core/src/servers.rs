@@ -160,6 +160,7 @@ impl Server {
         recv
     }
 
+    #[allow(dead_code)]
     async fn create_docker_container(&self) -> Result<String, ServerError> {
         tracing::info!(
             "Creating docker container for server {}",

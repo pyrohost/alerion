@@ -7,7 +7,7 @@ use poem::listener::TcpListener;
 use poem::middleware::{Tracing, Cors};
 use poem::web::websocket::WebSocket;
 use poem::web::{Data, Json, Path};
-use poem::{endpoint, get, handler, post, Body, EndpointExt, IntoResponse, Route, Server};
+use poem::{endpoint, get, handler, post, EndpointExt, IntoResponse, Route, Server};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
@@ -60,7 +60,7 @@ async fn initialize_websocket(
 
 #[handler]
 async fn create_server(Json(options): Json<CreateServerRequest>, Data(server_pool): Data<&Arc<ServerPool>>) -> impl IntoResponse {
-    let server = match server_pool.get_server(options.uuid).await {
+    let _server = match server_pool.get_server(options.uuid).await {
         Some(s) => s,
         None => {
             let server_fut = server_pool.register_server(options.uuid, options.start_on_completion);
@@ -97,7 +97,7 @@ pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::
                 .at("servers/:uuid/ws", ws_endpoint),
         )
         .with(cors)
-        .with(Tracing::default())
+        .with(Tracing)
         .data(server_pool);
 
     Server::new(TcpListener::bind((config.api.host, config.api.port)))
