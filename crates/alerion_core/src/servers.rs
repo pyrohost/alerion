@@ -71,7 +71,11 @@ impl ServerPool {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn register_server(&self, uuid: Uuid, start: bool) -> Result<Arc<Server>, ServerError> {
+    pub async fn register_server(
+        &self,
+        uuid: Uuid,
+        start: bool,
+    ) -> Result<Arc<Server>, ServerError> {
         tracing::info!("Adding server {uuid}...");
 
         let remote_api = Arc::clone(&self.remote_api);

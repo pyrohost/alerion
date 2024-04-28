@@ -4,7 +4,7 @@ use uuid::Uuid;
 /// `GET`
 pub mod get {
     use super::*;
-    
+
     /// `GET /api`
     pub mod api {
         use super::*;
@@ -23,7 +23,7 @@ pub mod get {
                     pub page: Option<u32>,
                     pub per_page: Option<u32>,
                 }
-                
+
                 /// `GET /api/remote/servers`
                 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
                 pub struct Response {
@@ -118,7 +118,9 @@ pub mod get {
                             pub mod allocations {
                                 use super::*;
 
-                                #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+                                #[derive(
+                                    Default, Debug, Clone, PartialEq, Serialize, Deserialize,
+                                )]
                                 pub struct Default {
                                     pub ip: String,
                                     pub port: i64,
@@ -166,7 +168,9 @@ pub mod get {
                             pub mod config {
                                 use super::*;
 
-                                #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+                                #[derive(
+                                    Default, Debug, Clone, PartialEq, Serialize, Deserialize,
+                                )]
                                 pub struct Replace {
                                     #[serde(rename = "match")]
                                     pub match_field: String,
@@ -183,7 +187,6 @@ pub mod get {
                         pub prev: Option<String>,
                         pub next: Option<String>,
                     }
-
 
                     #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
                     pub struct Meta {
@@ -208,7 +211,7 @@ pub mod get {
                         }
                     }
                 }
-                
+
                 /// `GET /api/client/servers/:uuid`
                 pub mod uuid {
                     use super::*;
@@ -216,7 +219,7 @@ pub mod get {
                     /// Path parameters for `GET /api/client/servers/:uuid`
                     #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
                     pub struct Path {
-                        pub uuid: Uuid
+                        pub uuid: Uuid,
                     }
 
                     /// Response for `GET /api/client/servers/:uuid`
@@ -247,11 +250,11 @@ pub mod get {
 /// `POST`
 pub mod post {
     use super::*;
-    
+
     /// `POST /api`
     pub mod api {
         use super::*;
-        
+
         /// `POST /api/remote`
         pub mod remote {
             use super::*;
@@ -259,7 +262,7 @@ pub mod post {
             /// `POST /api/remote/servers`
             pub mod servers {
                 use super::*;
-                
+
                 /// `POST /api/remote/servers/reset`
                 pub mod reset {
                     use super::*;
@@ -276,7 +279,7 @@ pub mod post {
                     /// Path parameters for `POST /api/remote/servers/:uuid`
                     #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
                     pub struct Path {
-                        pub uuid: Uuid
+                        pub uuid: Uuid,
                     }
 
                     /// `POST /api/remote/servers/:uuid/install`
@@ -300,7 +303,7 @@ pub mod post {
             /// `POST /api/remote/activity`
             pub mod activity {
                 use super::*;
-                
+
                 /// Body for `POST /api/remote/activity`
                 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
                 pub struct Body {
@@ -321,12 +324,11 @@ pub mod post {
                         pub user: String,
                     }
                 }
-                
+
                 /// `POST /api/remote/activity`
                 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
                 pub struct Response;
             }
         }
-   }
+    }
 }
-
