@@ -140,7 +140,7 @@ impl Volume {
     pub fn to_datamodel_mount(&self, target: String) -> models::Mount {
         models::Mount {
             target: Some(target),
-            source: Some(self.mountpoint_as_str().into_owned()),
+            source: Some(self.name.full_name()),
             typ: Some(models::MountTypeEnum::VOLUME),
             read_only: Some(false),
             consistency: None,

@@ -127,13 +127,13 @@ impl Container {
 
         let cfg = Config {
             hostname: Some(hostname.as_str()),
-            user: Some(name.purpose),
+            user: Some("1000:1000"),
             attach_stdin: Some(true),
             attach_stdout: Some(true),
             attach_stderr: Some(true),
             open_stdin: Some(true),
-            image: Some("scratch"),
-            cmd: Some(vec!["bash", "/mnt/install/install.sh"]),
+            image: Some("ghcr.io/pterodactyl/installers:alpine"),
+            cmd: Some(vec!["ash", "/mnt/install/install.sh"]),
             env: Some(vec!["SUBJECT=world"]),
             host_config: Some(host_config),
             labels: Some(docker::alerion_version_labels()),
