@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::servers::remote;
+use crate::servers::{docker, remote};
 use crate::webserver::websocket::SendWebsocketEvent;
 use super::ServerError;
 
@@ -61,6 +61,8 @@ impl Server {
             docker,
         };
 
+        initiate_server(&mut server).await?;
+
         Ok(Arc::new(server))
     }
 
@@ -77,4 +79,16 @@ impl Server {
     pub fn server_time(&self) -> u64 {
         self.start_time.elapsed().as_millis() as u64
     }
+}
+
+pub async fn initiate_server(s: &mut Server) -> Result<(), ServerError> {
+    let _config = s.remote_api.get_server_configuration(s.uuid).await?;
+    // lets pretend we're doing sum with this for now :3
+
+    let _install = s.remote_api.get_install_instructions(s.uuid).await?;
+    // again ;3
+
+    let _handle = docker::container::initiate_installation(&s.docker, s.uuid).await?;
+
+    Ok(())
 }
