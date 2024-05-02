@@ -33,7 +33,7 @@ impl ServerPool {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn fetch_existing_servers(&self) -> Result<(), ServerError> {
+    pub async fn fetch_existing(&self) -> Result<(), ServerError> {
         tracing::info!("Fetching existing servers on this node");
 
         let servers = self.remote_api.get_servers().await?;
@@ -58,7 +58,7 @@ impl ServerPool {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn register_server(&self, uuid: Uuid, start: bool) -> Result<Arc<Server>, ServerError> {
+    pub async fn create(&self, uuid: Uuid, start_on_completion: bool) -> Result<Arc<Server>, ServerError> {
         tracing::info!("Adding server {uuid}...");
 
         let remote_api = Arc::clone(&self.remote_api);
@@ -74,7 +74,7 @@ impl ServerPool {
         Ok(server)
     }
 
-    pub async fn get_server(&self, uuid: Uuid) -> Option<Arc<Server>> {
+    pub async fn get(&self, uuid: Uuid) -> Option<Arc<Server>> {
         self.servers.read().await.get(&uuid).cloned()
     }
 }

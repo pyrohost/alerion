@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use alerion_datamodel as dm;
 use bollard::Docker;
-use bollard::container::{Config, CreateContainerOptions};
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -51,7 +50,7 @@ impl Server {
     ) -> Result<Arc<Self>, ServerError> {
         tracing::debug!("Creating new server {uuid}");
 
-        let server = Arc::new(Self {
+        let mut server = Self {
             start_time: Instant::now(),
             uuid,
             container_name: format!("{}_container", uuid.as_hyphenated()),
@@ -60,12 +59,12 @@ impl Server {
             server_info,
             remote_api,
             docker,
-        });
+        };
 
-        Ok(server)
+        Ok(Arc::new(server))
     }
 
-    pub async fn add_websocket_connection(&self) -> mpsc::Receiver<SendWebsocketEvent> {
+    pub async fn add_websocket(&self) -> mpsc::Receiver<SendWebsocketEvent> {
         let id = self.websocket_id_counter.fetch_add(1, Ordering::SeqCst);
 
         let (send, recv) = mpsc::channel(64);
@@ -73,32 +72,6 @@ impl Server {
         self.websocket_connections.lock().await.insert(id, send);
 
         recv
-    }
-
-    #[allow(dead_code)]
-    async fn create_docker_container(&self) -> Result<String, ServerError> {
-        tracing::info!(
-            "Creating docker container for server {}",
-            self.uuid.as_hyphenated()
-        );
-
-        let opts = CreateContainerOptions {
-            name: self.container_name.clone(),
-            platform: None,
-        };
-
-        let config: Config<&str> = Config {
-            attach_stdin: Some(true),
-            attach_stdout: Some(true),
-            attach_stderr: Some(true),
-            ..Config::default()
-        };
-
-        let response = self.docker.create_container(Some(opts), config).await?;
-
-        tracing::debug!("Created docker container: {response:#?}");
-
-        Ok(response.id)
     }
 
     pub fn server_time(&self) -> u64 {

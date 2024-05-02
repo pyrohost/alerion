@@ -48,8 +48,8 @@ async fn initialize_websocket(
     Data(server_pool): Data<&Arc<ServerPool>>,
     ws: WebSocket,
 ) -> impl IntoResponse {
-    if let Some(server) = server_pool.get_server(uuid).await {
-        let recv = server.add_websocket_connection().await;
+    if let Some(server) = server_pool.get(uuid).await {
+        let recv = server.add_websocket().await;
 
         ws.on_upgrade(move |mut socket| websocket::websocket_handler(socket, recv, uuid))
             .into_response()
@@ -60,10 +60,10 @@ async fn initialize_websocket(
 
 #[handler]
 async fn create_server(Json(options): Json<CreateServerRequest>, Data(server_pool): Data<&Arc<ServerPool>>) -> impl IntoResponse {
-    let _server = match server_pool.get_server(options.uuid).await {
+    let _server = match server_pool.get(options.uuid).await {
         Some(s) => s,
         None => {
-            let server_fut = server_pool.register_server(options.uuid, options.start_on_completion);
+            let server_fut = server_pool.create(options.uuid, options.start_on_completion);
             let Ok(server) = server_fut.await else {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             };
