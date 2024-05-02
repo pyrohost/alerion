@@ -38,13 +38,9 @@ impl AlerionConfig {
             "Loading Alerion config from {}",
             project_dirs.config_dir().display()
         );
-        let config_path = project_dirs.config_dir().join("config.json");
-        let config = std::fs::read_to_string(&config_path).map_err(|e| {
-            anyhow!(
-                "Could not read Alerion config from {}: {}",
-                config_path.display(),
-                e
-            )
+        //let config_path = project_dirs.config_dir().join("config.json");
+        let config = std::fs::read_to_string("/etc/alerion/config.json").map_err(|e| {
+            anyhow!("Could not read Alerion config: {e}")
         })?;
 
         let config: AlerionConfig = serde_json::from_str(&config)?;
