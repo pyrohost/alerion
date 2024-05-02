@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use alerion_datamodel::webserver::CreateServerRequest;
 use poem::listener::TcpListener;
-use poem::middleware::{Tracing, Cors};
+use poem::middleware::Cors;
 use poem::web::websocket::WebSocket;
 use poem::web::{Data, Json, Path};
 use poem::{endpoint, get, handler, post, EndpointExt, IntoResponse, Route, Server};
@@ -100,7 +100,7 @@ pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::
                 .at("servers/:uuid/ws", ws_endpoint),
         )
         .with(cors)
-        .with(Tracing)
+        .with(middleware::tracing::Tracing)
         .data(server_pool);
 
     Server::new(TcpListener::bind((config.api.host, config.api.port)))
