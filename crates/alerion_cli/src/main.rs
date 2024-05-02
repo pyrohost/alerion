@@ -5,6 +5,8 @@ use tracing_subscriber::filter;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
+    std::env::set_var("RUST_LOG", "debug");
+
     tracing_subscriber::fmt()
         .with_env_filter(filter::EnvFilter::from_default_env())
         .init();
