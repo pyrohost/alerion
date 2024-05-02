@@ -253,7 +253,15 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
             }
         }
 
-        Volume::create(api, name).await?
+        tracing::info!("creating installation volume");
+
+        match Volume::create(api, name).await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!("failed to create installation volume: {e:?}");
+                return Err(e);
+            }
+        }
     };
 
     let server_volume = {
@@ -287,7 +295,15 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
             }
         }
 
-        Volume::create(api, name).await?
+        tracing::info!("creating server volume");
+
+        match Volume::create(api, name).await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!("failed to create server volume: {e:?}");
+                return Err(e);
+            }
+        }
     };
 
 
@@ -331,20 +347,36 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
             ..models::HostConfig::default()
         };
 
-        Container::create(api, name, host_cfg).await?
+        tracing::info!("creating installation container");
+
+        match Container::create(api, name, host_cfg).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("failed to create installation container: {e:?}");
+                return Err(e);
+            }
+        }
     };
 
 
     // put the installation script in the install volume
     let path = install_volume.mountpoint.join("install.sh");
-    fs::write(path, b"echo \"hello, $SUBJECT!\"\n").await?;
+    if let Err(e) = fs::write(path, b"echo \"hello, $SUBJECT!\"\n").await {
+        tracing::error!("failed to write installation script: {e:?}");
+        return Err(e.into());
+    };
 
 
-    install_container.start(api).await?;
+    if let Err(e) = install_container.start(api).await {
+        tracing::error!("container failed to start: {e:?}");
+        return Err(e);
+    }
 
     let monitor_api = api.clone();
     let handle = tokio::spawn(async move {
-        install_container.attach(&monitor_api).await?;
+        if let Err(e) = install_container.attach(&monitor_api).await {
+            tracing::error!("failed to attach to container: {e:?}");
+        }
 
         Ok(())
     });

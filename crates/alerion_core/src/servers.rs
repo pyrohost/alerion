@@ -7,7 +7,7 @@ pub type Result<T> = std::result::Result<T, ServerError>;
 #[derive(Debug, Error)]
 pub enum ServerError {
     #[error("docker error: {0}")]
-    Docker(#[from] bollard::errors::Error),
+    Docker(#[from] docker::DockerError),
     #[error("malformed response from the Docker API")]
     MalformedResponse,
     #[error("panel remote API error: {0}")]

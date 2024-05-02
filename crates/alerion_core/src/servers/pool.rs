@@ -6,8 +6,7 @@ use uuid::Uuid;
 
 use crate::config::AlerionConfig;
 use crate::servers::server::{ServerInfo, Server};
-use crate::servers::remote;
-use super::ServerError;
+use crate::servers::{docker, remote, ServerError};
 
 pub struct ServerPool {
     servers: RwLock<HashMap<Uuid, Arc<Server>>>,
@@ -23,7 +22,7 @@ impl ServerPool {
         let remote_api = remote::RemoteClient::new(config)?;
 
         tracing::info!("Initiating connection to Docker Engine");
-        let docker = Docker::connect_with_defaults()?;
+        let docker = Docker::connect_with_defaults().map_err(docker::DockerError::Api)?;
 
         Ok(Self {
             servers: RwLock::new(HashMap::new()),

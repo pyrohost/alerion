@@ -64,11 +64,14 @@ async fn create_server(Json(options): Json<CreateServerRequest>, Data(server_poo
         Some(s) => s,
         None => {
             let server_fut = server_pool.create(options.uuid, options.start_on_completion);
-            let Ok(server) = server_fut.await else {
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            };
 
-            server
+            match server_fut.await {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::error!("error occured when creating a server: {e}");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
         }
     };
 
