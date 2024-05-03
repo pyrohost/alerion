@@ -54,13 +54,15 @@ impl ServerPool {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(name = "create_server", skip(self))]
     pub async fn create(&self, uuid: Uuid, start_on_completion: bool) -> Result<Arc<Server>, ServerError> {
         let remote_api = Arc::clone(&self.remote_api);
         let docker = Arc::clone(&self.docker);
 
         tracing::debug!("fetching server configuration from remote");
-        let config = remote_api.get_server_configuration(uuid).await?;
+        let config_fut = remote_api.get_server_configuration(uuid);
+        let config = crate::ensure!(config_fut.await, "failed to retrieve server configuration from remote source");
+
         let server_info = ServerInfo::from_remote_info(config.settings);
 
         let server = Server::new(uuid, server_info, remote_api, docker).await?;

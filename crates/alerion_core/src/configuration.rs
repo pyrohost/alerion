@@ -53,22 +53,14 @@ impl AlerionConfig {
 
         tracing::info!("creating configuration directory");
 
-        if let Err(e) = fs::create_dir_all(&CONFIG_PATH).await {
-            tracing::error!("failed to create configuration directory {CONFIG_PATH}: {e}");
-            return Err(e.into());
-        }
+        let result = fs::create_dir_all(&CONFIG_PATH).await;
+        crate::ensure!(result, "failed to create configuration directory {CONFIG_PATH}");
 
         tracing::info!("loading configuration from {}", path.display());
+        let result = fs::read_to_string(path).await;
+        let read = crate::ensure!(result, "failed to load configuration file");
 
-        let config = match fs::read_to_string(path).await {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::error!("failed to load configuration file: {e}");
-                return Err(e.into());
-            }
-        };
-
-        let config: AlerionConfig = serde_json::from_str(&config)?;
+        let config: AlerionConfig = serde_json::from_str(&read)?;
         Ok(config)
     }
 

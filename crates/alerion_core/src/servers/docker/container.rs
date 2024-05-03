@@ -255,13 +255,8 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
 
         tracing::info!("creating installation volume");
 
-        match Volume::create(api, name).await {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::error!("failed to create installation volume: {e:?}");
-                return Err(e);
-            }
-        }
+        let vol_fut = Volume::create(api, name);
+        crate::ensure!(vol_fut.await, "failed to create server volume")
     };
 
     let server_volume = {
@@ -297,13 +292,8 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
 
         tracing::info!("creating server volume");
 
-        match Volume::create(api, name).await {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::error!("failed to create server volume: {e:?}");
-                return Err(e);
-            }
-        }
+        let vol_fut = Volume::create(api, name);
+        crate::ensure!(vol_fut.await, "failed to create server volume")
     };
 
 
@@ -349,13 +339,8 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
 
         tracing::info!("creating installation container");
 
-        match Container::create(api, name, host_cfg).await {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::error!("failed to create installation container: {e:?}");
-                return Err(e);
-            }
-        }
+        let cont_fut = Container::create(api, name, host_cfg);
+        crate::ensure!(cont_fut.await, "failed to create installation container")
     };
 
 
@@ -374,9 +359,8 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
 
     let monitor_api = api.clone();
     let handle = tokio::spawn(async move {
-        if let Err(e) = install_container.attach(&monitor_api).await {
-            tracing::error!("failed to attach to container: {e:?}");
-        }
+        let attach_fut = install_container.attach(&monitor_api);
+        crate::ensure!(attach_fut.await, "failed to attach to container");
 
         Ok(())
     });
