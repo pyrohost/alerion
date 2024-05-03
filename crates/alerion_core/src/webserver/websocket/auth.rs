@@ -5,7 +5,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::config::AlerionConfig;
+use crate::configuration::AlerionConfig;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {

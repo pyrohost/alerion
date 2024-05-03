@@ -14,7 +14,7 @@ use sysinfo::System;
 use uuid::Uuid;
 
 use self::middleware::bearer_auth::BearerAuthMiddleware;
-use crate::config::AlerionConfig;
+use crate::configuration::AlerionConfig;
 use crate::servers::pool::ServerPool;
 
 #[derive(Debug, Serialize, Deserialize)]

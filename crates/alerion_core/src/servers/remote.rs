@@ -8,7 +8,7 @@ use reqwest::StatusCode;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::config::AlerionConfig;
+use crate::configuration::AlerionConfig;
 
 #[derive(Debug, Error)]
 pub enum ResponseError {

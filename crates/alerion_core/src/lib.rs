@@ -2,10 +2,9 @@
 
 use std::sync::Arc;
 
-use config::AlerionConfig;
+use configuration::AlerionConfig;
 use futures::stream::{FuturesUnordered, StreamExt};
 
-use crate::filesystem::setup_directories;
 use crate::servers::pool::ServerPool;
 
 pub fn splash() {
@@ -36,8 +35,7 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     tracing::info!("Starting Alerion");
 
-    let project_dirs = setup_directories().await?;
-    let config = AlerionConfig::load(&project_dirs)?;
+    let config = AlerionConfig::load().await?;
 
     let server_pool = Arc::new(ServerPool::new(&config).await?);
 
@@ -66,8 +64,7 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub mod config;
-pub mod filesystem;
+pub mod configuration;
 pub mod servers;
 pub mod webserver;
 pub mod websocket;

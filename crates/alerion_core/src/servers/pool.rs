@@ -4,7 +4,7 @@ use bollard::Docker;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::config::AlerionConfig;
+use crate::configuration::AlerionConfig;
 use crate::servers::server::{ServerInfo, Server};
 use crate::servers::{docker, remote, ServerError};
 
