@@ -17,11 +17,9 @@ pub struct ServerPool {
 impl ServerPool {
     #[tracing::instrument(skip(config))]
     pub async fn new(config: &AlerionConfig) -> Result<Self, ServerError> {
-        tracing::info!("Initializing managed servers...");
-
         let remote_api = remote::RemoteClient::new(config)?;
 
-        tracing::info!("Initiating connection to Docker Engine");
+        tracing::info!("initiating connection to Docker Engine");
         let docker = Docker::connect_with_defaults().map_err(docker::DockerError::Api)?;
 
         Ok(Self {
@@ -33,12 +31,12 @@ impl ServerPool {
 
     #[tracing::instrument(skip(self))]
     pub async fn fetch_existing(&self) -> Result<(), ServerError> {
-        tracing::info!("Fetching existing servers on this node");
+        tracing::info!("fetching existing servers on this node");
 
         let servers = self.remote_api.get_servers().await?;
 
         for s in servers {
-            tracing::info!("Adding server {}...", s.uuid);
+            tracing::info!("recovering server {}", s.uuid);
 
             let uuid = s.uuid;
             let info = ServerInfo::from_remote_info(s.settings);
@@ -58,12 +56,10 @@ impl ServerPool {
 
     #[tracing::instrument(skip(self))]
     pub async fn create(&self, uuid: Uuid, start_on_completion: bool) -> Result<Arc<Server>, ServerError> {
-        tracing::info!("Adding server {uuid}...");
-
         let remote_api = Arc::clone(&self.remote_api);
         let docker = Arc::clone(&self.docker);
 
-        tracing::debug!("Fetching server configuration from remote");
+        tracing::debug!("fetching server configuration from remote");
         let config = remote_api.get_server_configuration(uuid).await?;
         let server_info = ServerInfo::from_remote_info(config.settings);
 

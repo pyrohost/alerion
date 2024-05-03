@@ -1,7 +1,6 @@
 #![deny(clippy::unwrap_used)]
 
 use std::sync::Arc;
-use std::error;
 
 use configuration::AlerionConfig;
 use futures::stream::{FuturesUnordered, StreamExt};

@@ -41,15 +41,12 @@ pub struct Server {
 }
 
 impl Server {
-    #[tracing::instrument(skip(server_info, remote_api, docker))]
     pub async fn new(
         uuid: Uuid,
         server_info: ServerInfo,
         remote_api: Arc<remote::RemoteClient>,
         docker: Arc<Docker>,
     ) -> Result<Arc<Self>, ServerError> {
-        tracing::debug!("Creating new server {uuid}");
-
         let mut server = Self {
             start_time: Instant::now(),
             uuid,
@@ -82,11 +79,8 @@ impl Server {
 }
 
 pub async fn initiate_server(s: &mut Server) -> Result<(), ServerError> {
-    let _config = s.remote_api.get_server_configuration(s.uuid).await?;
-    // lets pretend we're doing sum with this for now :3
-
     let _install = s.remote_api.get_install_instructions(s.uuid).await?;
-    // again ;3
+    // lets pretend we're doing sum with this for now :3
 
     let _handle = docker::container::initiate_installation(&s.docker, s.uuid).await?;
 
