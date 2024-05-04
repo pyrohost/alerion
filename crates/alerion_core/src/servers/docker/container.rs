@@ -9,7 +9,11 @@ use uuid::Uuid;
 use futures::StreamExt;
 use tokio::fs;
 
-use crate::servers::docker::{self, DockerError, volume::{self, VolumeName, Volume, FoundVolume}};
+use crate::servers::docker::{
+    self, DockerError,
+    volume::{self, VolumeName, Volume, FoundVolume},
+    environment::PYRODACTYL_USER,
+};
 
 #[derive(Debug, Clone)]
 pub struct ContainerName {
@@ -127,12 +131,12 @@ impl Container {
 
         let cfg = Config {
             hostname: Some(hostname.as_str()),
-            user: Some("root"),
+            user: Some(PYRODACTYL_USER),
             attach_stdin: Some(true),
             attach_stdout: Some(true),
             attach_stderr: Some(true),
             open_stdin: Some(true),
-            image: Some("ghcr.io/pterodactyl/installers:alpine"),
+            image: Some("https://ghcr.io/pterodactyl/installers:alpine"),
             cmd: Some(vec!["ash", "/mnt/install/install.sh"]),
             env: Some(vec!["SUBJECT=world"]),
             host_config: Some(host_config),
@@ -346,7 +350,15 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
 
     // put the installation script in the install volume
     let path = install_volume.mountpoint.join("install.sh");
-    if let Err(e) = fs::write(path, b"echo \"hello, $SUBJECT!\"\nwhoami\n").await {
+    let script = br#"
+    echo "hello, $SUBJECT!"
+    whoami
+    pwd
+    touch tmpfile
+    cd /mnt/server
+    echo ok > serverfile.txt
+    "#;
+    if let Err(e) = fs::write(path, script).await {
         tracing::error!("failed to write installation script: {e:?}");
         return Err(e.into());
     };

@@ -3,7 +3,7 @@ use std::io;
 
 use thiserror::Error;
 
-const UNIX_PYRODACTYL_USER: &str = "pyrodactyl";
+pub const PYRODACTYL_USER: &str = "pyrodactyl";
 
 #[derive(Debug, Error)]
 pub enum EnvSetupError {
@@ -44,7 +44,7 @@ mod imp {
             .arg("--system")
             .arg("--shell")
             .arg("/usr/sbin/nologin")
-            .arg(UNIX_PYRODACTYL_USER)
+            .arg(PYRODACTYL_USER)
             .output()?;
 
         // see useradd(8) for exit code documentation
@@ -52,10 +52,10 @@ mod imp {
 
         match code {
             Some(0) => {
-                tracing::info!("successfully created OS user '{UNIX_PYRODACTYL_USER}'");
+                tracing::info!("successfully created OS user '{PYRODACTYL_USER}'");
             }
             Some(9) => {
-                tracing::info!("OS user '{UNIX_PYRODACTYL_USER}' already exists");
+                tracing::info!("OS user '{PYRODACTYL_USER}' already exists");
             }
             _ => {
                 return Err(EnvSetupError::Subprocess {

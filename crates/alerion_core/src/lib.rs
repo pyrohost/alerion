@@ -34,7 +34,7 @@ Source code: https://github.com/pyrohost/alerion
 pub async fn alerion_main() -> anyhow::Result<()> {
     splash();
 
-    tracing::info!("Starting Alerion");
+    tracing::info!("starting alerion");
 
     servers::docker::environment::setup()?;
 
@@ -42,8 +42,6 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     let server_pool = ServerPool::new(&config).await?;
     let server_pool = Arc::new(server_pool);
-
-    //server_pool.create_server("0e4059ca-d79b-46a5-8ec4-95bd0736d150".try_into().unwrap()).await;
 
     let webserver_handle = tokio::spawn(async move {
         let cfg = config.clone();
