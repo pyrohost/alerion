@@ -36,6 +36,8 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     tracing::info!("Starting Alerion");
 
+    servers::docker::environment::setup()?;
+
     let config = AlerionConfig::load().await?;
 
     let server_pool = ServerPool::new(&config).await?;

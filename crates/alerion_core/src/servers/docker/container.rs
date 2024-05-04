@@ -127,7 +127,7 @@ impl Container {
 
         let cfg = Config {
             hostname: Some(hostname.as_str()),
-            user: Some("1000:1000"),
+            user: Some("root"),
             attach_stdin: Some(true),
             attach_stdout: Some(true),
             attach_stderr: Some(true),
@@ -346,7 +346,7 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
 
     // put the installation script in the install volume
     let path = install_volume.mountpoint.join("install.sh");
-    if let Err(e) = fs::write(path, b"echo \"hello, $SUBJECT!\"\n").await {
+    if let Err(e) = fs::write(path, b"echo \"hello, $SUBJECT!\"\nwhoami\n").await {
         tracing::error!("failed to write installation script: {e:?}");
         return Err(e.into());
     };
