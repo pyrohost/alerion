@@ -15,7 +15,6 @@ pub struct ServerPool {
 }
 
 impl ServerPool {
-    #[tracing::instrument(skip(config))]
     pub async fn new(config: &AlerionConfig) -> Result<Self, ServerError> {
         let remote_api = remote::RemoteClient::new(config)?;
 
@@ -29,7 +28,7 @@ impl ServerPool {
         })
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(name = "fetch_existing_servers", skip(self))]
     pub async fn fetch_existing(&self) -> Result<(), ServerError> {
         tracing::info!("fetching existing servers on this node");
 
