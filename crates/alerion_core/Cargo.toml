@@ -29,3 +29,4 @@ bitflags = "2.5.0"
 num_cpus = "1.16.0"
 sysinfo = "0.30.11"
 poem = { version = "3.0.0", features = ["websocket"] }
+libc = "0.2.154"

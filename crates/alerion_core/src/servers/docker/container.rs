@@ -136,7 +136,7 @@ impl Container {
             attach_stdout: Some(true),
             attach_stderr: Some(true),
             open_stdin: Some(true),
-            image: Some("https://ghcr.io/pterodactyl/installers:alpine"),
+            image: Some("ghcr.io/pterodactyl/installers:alpine"),
             cmd: Some(vec!["ash", "/mnt/install/install.sh"]),
             env: Some(vec!["SUBJECT=world"]),
             host_config: Some(host_config),
