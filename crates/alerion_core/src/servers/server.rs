@@ -1,19 +1,69 @@
-use std::collections::HashMap;
-use std::sync::atomic::{Ordering, AtomicU32};
+use std::rc::Rc;
 use std::time::Instant;
 use std::sync::Arc;
 
 use alerion_datamodel as dm;
 use bollard::Docker;
-use tokio::sync::Mutex;
-use tokio::sync::mpsc;
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::servers::{docker, remote};
-use crate::webserver::websocket::SendWebsocketEvent;
 use super::ServerError;
 
-//TODO: Remove allow(dead_code) when implemented
+pub struct ServerChannel {
+    antenna: broadcast::Receiver<ServerMessage>,
+}
+
+#[derive(Clone, Debug)]
+pub enum ServerMessage {
+    ConsoleOutput {
+        output: Rc<String>,
+    },
+
+    DaemonOutput {
+        output: Rc<String>,
+    },
+
+    DaemonError {
+        output: Rc<String>,
+    },
+}
+
+/// Pools all websocket connections attached to this server.   
+///
+/// This is implemented in a sorta-stateless way using tokio's broadcast channels. 
+/// The `WebsocketBucket` doesn't uniquely identify websocket connections. Doing so
+/// would introduce overhead and complexity, requiring atomics, locks and more channels.
+/// Broadcasting to many receivers is ultimately cheap since cloning messages is cheap.  
+///
+/// Permission handling is done by receivers.
+pub struct WebsocketBucket {
+    broadcaster: broadcast::Sender<ServerMessage>,
+}
+
+impl WebsocketBucket {
+    pub fn new() -> Self {
+        let (broadcaster, _) = broadcast::channel(64);
+
+        Self {
+            broadcaster,
+        }
+    }
+
+    /// "Adds" a receiver to this bucket. Just drop the returned `ServerChannel` to unsubscribe.
+    pub fn add(&self) -> ServerChannel {
+        ServerChannel {
+            antenna: self.broadcaster.subscribe(),
+        }
+    }
+
+    /// Broadcast a message to all receivers.
+    pub fn broadcast(&self, msg: ServerMessage) {
+        self.broadcaster.send(msg);
+    }
+}
+
+// TODO: Remove allow(dead_code) when implemented
 #[allow(dead_code)]
 pub struct ServerInfo {
     container: dm::remote::server::ContainerConfig,
@@ -27,62 +77,22 @@ impl ServerInfo {
     }
 }
 
-//TODO: Remove allow(dead_code) when implemented
+// TODO: Remove allow(dead_code) when implemented
 #[allow(dead_code)]
 pub struct Server {
-    start_time: Instant,
-    uuid: Uuid,
-    container_name: String,
-    websocket_id_counter: AtomicU32,
-    websocket_connections: Mutex<HashMap<u32, mpsc::Sender<SendWebsocketEvent>>>,
-    server_info: ServerInfo,
-    remote_api: Arc<remote::RemoteClient>,
+    pub start_time: Instant,
+    pub websocket: WebsocketBucket,
+    pub uuid: Uuid,
     docker: Arc<Docker>,
 }
 
 impl Server {
-    pub async fn new(
-        uuid: Uuid,
-        server_info: ServerInfo,
-        remote_api: Arc<remote::RemoteClient>,
-        docker: Arc<Docker>,
-    ) -> Result<Arc<Self>, ServerError> {
-        let mut server = Self {
+    pub fn new(uuid: Uuid, docker: Arc<Docker>) -> Self {
+        Server {
             start_time: Instant::now(),
+            websocket: WebsocketBucket::new(),
             uuid,
-            container_name: format!("{}_container", uuid.as_hyphenated()),
-            websocket_id_counter: AtomicU32::new(0),
-            websocket_connections: Mutex::new(HashMap::new()),
-            server_info,
-            remote_api,
             docker,
-        };
-
-        initiate_server(&mut server).await?;
-
-        Ok(Arc::new(server))
+        }
     }
-
-    pub async fn add_websocket(&self) -> mpsc::Receiver<SendWebsocketEvent> {
-        let id = self.websocket_id_counter.fetch_add(1, Ordering::SeqCst);
-
-        let (send, recv) = mpsc::channel(64);
-
-        self.websocket_connections.lock().await.insert(id, send);
-
-        recv
-    }
-
-    pub fn server_time(&self) -> u64 {
-        self.start_time.elapsed().as_millis() as u64
-    }
-}
-
-pub async fn initiate_server(s: &mut Server) -> Result<(), ServerError> {
-    let _install = s.remote_api.get_install_instructions(s.uuid).await?;
-    // lets pretend we're doing sum with this for now :3
-
-    let _handle = docker::container::initiate_installation(&s.docker, s.uuid).await?;
-
-    Ok(())
 }

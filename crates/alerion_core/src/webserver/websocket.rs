@@ -6,13 +6,13 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, Mutex};
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecvWebsocketEvent {
     event: RecvEventType,
     args: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendWebsocketEvent {
     event: SendEventType,
     args: Option<Vec<String>>,
@@ -29,7 +29,7 @@ struct AuthDetailsInner {
     socket: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum RecvEventType {
     #[serde(rename = "auth")]
     Auth,
@@ -43,7 +43,7 @@ pub enum RecvEventType {
     SendStats,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum SendEventType {
     #[serde(rename = "auth success")]
     AuthSuccess,
