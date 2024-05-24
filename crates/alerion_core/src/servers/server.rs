@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use std::time::Instant;
 use std::sync::Arc;
 
@@ -16,15 +15,15 @@ pub struct ServerChannel {
 #[derive(Clone, Debug)]
 pub enum ServerMessage {
     ConsoleOutput {
-        output: Rc<String>,
+        output: Arc<String>,
     },
 
     DaemonOutput {
-        output: Rc<String>,
+        output: Arc<String>,
     },
 
     DaemonError {
-        output: Rc<String>,
+        output: Arc<String>,
     },
 }
 
