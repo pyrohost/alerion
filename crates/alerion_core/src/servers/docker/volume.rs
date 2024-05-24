@@ -137,7 +137,7 @@ impl Volume {
         out
     }
     
-    pub fn to_datamodel_mount(&self, target: String) -> models::Mount {
+    pub fn to_docker_mount(&self, target: String) -> models::Mount {
         models::Mount {
             target: Some(target),
             source: Some(self.name.full_name()),
