@@ -1,6 +1,8 @@
 use std::io;
 
 use thiserror::Error;
+use poem::IntoResponse;
+use poem::http::StatusCode;
 
 pub type Result<T> = std::result::Result<T, ServerError>;
 
@@ -16,6 +18,24 @@ pub enum ServerError {
     Io(#[from] io::Error),
     #[error("action cannot be performed at this moment")]
     Conflict,
+}
+
+impl IntoResponse for ServerError {
+    fn into_response(self) -> poem::Response {
+        match self {
+            ServerError::Docker(_) | ServerError::MalformedResponse | ServerError::Io(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR.into()
+            }
+
+            ServerError::RemoteApi(_) => {
+                StatusCode::BAD_GATEWAY.into()
+            }
+
+            ServerError::Conflict => {
+                StatusCode::CONFLICT.into()
+            }
+        }
+    }
 }
 
 pub mod docker;
