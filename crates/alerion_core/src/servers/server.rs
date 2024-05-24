@@ -2,13 +2,12 @@ use std::rc::Rc;
 use std::time::Instant;
 use std::sync::Arc;
 
-use alerion_datamodel as dm;
 use bollard::Docker;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::servers::{docker, remote};
-use super::ServerError;
+pub use active::Egg;
 
 pub struct ServerChannel {
     antenna: broadcast::Receiver<ServerMessage>,
@@ -63,18 +62,10 @@ impl WebsocketBucket {
     }
 }
 
-// TODO: Remove allow(dead_code) when implemented
-#[allow(dead_code)]
-pub struct ServerInfo {
-    container: dm::remote::server::ContainerConfig,
-}
-
-impl ServerInfo {
-    pub fn from_remote_info(server_settings: dm::remote::server::ServerSettings) -> Self {
-        Self {
-            container: server_settings.container,
-        }
-    }
+pub enum State {
+    /// Empty server, with no egg set.
+    Bare,
+    Active(active::ActiveServer),
 }
 
 // TODO: Remove allow(dead_code) when implemented
@@ -83,16 +74,37 @@ pub struct Server {
     pub start_time: Instant,
     pub websocket: WebsocketBucket,
     pub uuid: Uuid,
+    remote: remote::ServerApi,
     docker: Arc<Docker>,
+    state: State,
 }
 
 impl Server {
-    pub fn new(uuid: Uuid, docker: Arc<Docker>) -> Self {
+    /// Creates a bare, uninitiated server.
+    pub fn new(
+        uuid: Uuid,
+        remote: remote::Api,
+        docker: Arc<Docker>,
+    ) -> Self {
         Server {
             start_time: Instant::now(),
             websocket: WebsocketBucket::new(),
             uuid,
+            remote: remote.server_api(uuid),
             docker,
+            state: State::Bare,
+        }
+    }
+
+    /// Switches the egg this server uses.  
+    ///
+    /// If it was using another egg before, this will forcefully
+    /// stop and uninstall the server.
+    pub fn switch_egg(&mut self, egg: Egg) {
+        if let State::Active(active) = self.state {
+            active.force_uninstall();
         }
     }
 }
+
+pub mod active;
