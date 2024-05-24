@@ -5,7 +5,7 @@ use bollard::Docker;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use crate::servers::{docker, remote};
+use crate::servers::remote;
 pub use active::Egg;
 
 pub struct ServerChannel {

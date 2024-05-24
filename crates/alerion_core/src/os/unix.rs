@@ -8,7 +8,7 @@ use std::ffi::{CStr, CString};
 use std::mem::zeroed;
 use std::ptr::null_mut;
 
-use libc::{sysconf, gid_t, uid_t, getpwnam_r, _SC_GETPW_R_SIZE_MAX, ERANGE, S_IRUSR, S_IWUSR, S_IXUSR, __errno_location};
+use libc::{sysconf, gid_t, uid_t, getpwnam_r, _SC_GETPW_R_SIZE_MAX, ERANGE, __errno_location};
 use thiserror::Error;
 use super::PYRODACTYL_USER;
 
