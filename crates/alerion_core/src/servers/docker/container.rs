@@ -9,10 +9,11 @@ use uuid::Uuid;
 use futures::StreamExt;
 use tokio::fs;
 
+use crate::os::PYRODACTYL_USER;
 use crate::servers::docker::{
     self, DockerError,
     volume::{self, VolumeName, Volume, FoundVolume},
-    environment::PYRODACTYL_USER,
+    bind_mount::BindMount,
 };
 
 #[derive(Debug, Clone)]
@@ -263,38 +264,9 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
         crate::ensure!(vol_fut.await, "failed to create server volume")
     };
 
-    let server_volume = {
-        let name = VolumeName::new_server(uuid);
-
-        match Volume::get(api, name.clone()).await? {
-            FoundVolume::Some(vol) => {
-                tracing::warn!("the server volume already exists and was created by alerion");
-                tracing::warn!("creation time: {}", vol.created_at().unwrap_or("unknown"));
-                tracing::warn!("this could either mean alerion crashed, or the installation");
-                tracing::warn!("process is not supposed to run right now and this is a bug");
-                tracing::warn!("TODO: we might want to back up this server, to avoid data loss");
-                tracing::warn!("caused by an alerion bug");
-                tracing::warn!("the volume will be deleted and the installation process will restart");
-
-                vol.force_remove(api).await?;
-            }
-
-            FoundVolume::Foreign(resp) => {
-                tracing::warn!("the server volume already exists, but wasn't created by alerion");
-                tracing::warn!("this could be an artifact from wings");
-                tracing::warn!("the volume will be deleted and the installation process will start");
-
-                tracing::debug!("Docker response body: {resp:#?}");
-
-                volume::force_remove_by_name(api, &name.full_name()).await?;
-            }
-
-            FoundVolume::None => {
-                tracing::debug!("server volume not found: OK");
-            }
-        }
-
-        tracing::info!("creating server volume");
+    let server_bind_mount = {
+        let mount = BindMount::new(uuid);
+        tracing::info!("creating server bind mount");
 
         let vol_fut = Volume::create(api, name);
         crate::ensure!(vol_fut.await, "failed to create server volume")
@@ -332,8 +304,8 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
 
         
         let volumes = vec![
-            install_volume.to_datamodel_mount("/mnt/install".to_owned()),
-            server_volume.to_datamodel_mount("/mnt/server".to_owned()),
+            install_volume.to_docker_mount("/mnt/install".to_owned()),
+            server_volume.to_docker_mount("/mnt/server".to_owned()),
         ];
 
         let host_cfg = models::HostConfig {

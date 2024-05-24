@@ -29,5 +29,4 @@ fn is_404(err: &bollard::errors::Error) -> bool {
 pub mod container;
 pub mod install;
 pub mod volume;
-pub mod environment;
 pub mod bind_mount;

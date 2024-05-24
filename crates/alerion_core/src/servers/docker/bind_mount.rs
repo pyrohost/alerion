@@ -7,18 +7,18 @@ use bollard::secret::MountBindOptions;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 
-use super::environment::DataRoot;
+use crate::os::{DataDirectoryImpl, DataDirectory};
 
 pub struct BindMount {
     path: PathBuf,
 }
 
 impl BindMount {
-    /// Create/recover a bind mount.
-    pub fn new(uuid: Uuid) -> io::Result<BindMount> {
-        let mounts = DataRoot::get().mounts()?;
-        let path = mounts.mount_of(uuid)?;
-        std::fs::create_dir_all(path)?;
+    /// Creates/resets a bind mount.
+    pub async fn new(uuid: Uuid) -> io::Result<BindMount> {
+        let mounts = DataDirectory::mounts();
+        let path = mounts.create_clean(uuid).await?;
+        std::fs::create_dir_all(&path)?;
 
         Ok(BindMount {
             path,
