@@ -4,3 +4,5 @@ group_imports = "StdExternalCrate"
 imports_granularity = "Module"
 imports_layout = "Horizontal"
 reorder_impl_items = true
+max_width = 100
+fn_call_width = 100
