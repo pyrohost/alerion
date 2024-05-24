@@ -30,3 +30,4 @@ pub mod container;
 pub mod install;
 pub mod volume;
 pub mod environment;
+pub mod bind_mount;
