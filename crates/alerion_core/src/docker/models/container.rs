@@ -9,7 +9,7 @@ use futures::StreamExt;
 use uuid::Uuid;
 
 use crate::os::PYRODACTYL_USER;
-use crate::servers::docker::{self, DockerError, is_404};
+use crate::docker::{self, DockerError, is_404};
 
 #[derive(Debug, Clone)]
 pub struct ContainerName {

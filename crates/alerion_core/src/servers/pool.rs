@@ -6,8 +6,8 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::configuration::AlerionConfig;
-use crate::servers::server::Server;
-use crate::servers::{docker, remote, ServerError};
+use crate::servers::{remote, ServerError, Server};
+use crate::docker;
 
 pub struct ServerPool {
     servers: RwLock<HashMap<Uuid, Arc<Server>>>,
@@ -44,6 +44,23 @@ impl ServerPool {
         }
 
         Ok(())
+    }
+
+    pub async fn try_create(&self, uuid: Uuid, start_on_completion: bool) -> Result<(), ServerError> {
+        let read = self.servers.read().await;
+
+        if read.get(&uuid).is_none() {
+            let server = Server::new(uuid, self.remote_api.clone(), Arc::clone(&self.docker));
+
+            drop(read);
+            let mut write = self.servers.write().await;
+
+
+            Ok(())
+        } else {
+            tracing::error!("server {uuid} already exists");
+            Err(ServerError::Conflict)
+        }
     }
 
     #[tracing::instrument(name = "create_server", skip(self))]

@@ -4,12 +4,14 @@ use thiserror::Error;
 use poem::IntoResponse;
 use poem::http::StatusCode;
 
+use crate::docker::DockerError;
+
 pub type Result<T> = std::result::Result<T, ServerError>;
 
 #[derive(Debug, Error)]
 pub enum ServerError {
     #[error("docker error: {0}")]
-    Docker(#[from] docker::DockerError),
+    Docker(#[from] DockerError),
     #[error("malformed response from the Docker API")]
     MalformedResponse,
     #[error("panel remote API error: {0}")]
@@ -38,7 +40,8 @@ impl IntoResponse for ServerError {
     }
 }
 
-pub mod docker;
+pub use server::Server;
+
 pub mod pool;
 pub mod remote;
 pub mod server;

@@ -3,8 +3,10 @@ use tokio::fs;
 use bollard::{models, Docker};
 use uuid::Uuid;
 
-use crate::servers::docker;
-use super::models::{volume, container, Volume, VolumeName, FoundVolume, BindMount, Container, ContainerName, FoundContainer};
+use crate::docker::{
+    self,
+    models::{volume, container, Volume, VolumeName, FoundVolume, BindMount, Container, ContainerName, FoundContainer},
+};
 
 
 /// Initiates the installation of a server.  

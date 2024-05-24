@@ -8,6 +8,8 @@ use uuid::Uuid;
 
 use crate::servers::remote;
 
+use super::ServerError;
+
 pub struct ServerChannel {
     antenna: broadcast::Receiver<ServerMessage>,
 }
@@ -34,6 +36,7 @@ pub struct WebsocketBucket {
 }
 
 impl WebsocketBucket {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let (broadcaster, _) = broadcast::channel(64);
 
@@ -54,10 +57,21 @@ impl WebsocketBucket {
     }
 }
 
+#[derive(Debug)]
 pub enum State {
     /// Empty server, with no egg set.
     Bare,
     Active(active::ActiveServer),
+}
+
+impl State {
+    pub fn is_bare(&self) -> bool {
+        matches!(self, State::Bare)
+    }
+
+    pub fn is_active(&self) -> bool {
+        matches!(self, State::Active(_))
+    }
 }
 
 // TODO: Remove allow(dead_code) when implemented
@@ -82,6 +96,21 @@ impl Server {
             docker,
             state: State::Bare,
         }
+    }
+
+    pub async fn installation_process(&self) -> Result<(), ServerError> {
+        // Server must not be active
+        if self.state.is_active() {
+            tracing::error!("tried to begin installation process, but server is already active");
+            return Err(ServerError::Conflict);
+        }
+
+        // Get remote server configuration
+        let cfg = self.remote.get_server_configuration().await?;
+        
+        
+
+        Ok(())
     }
 
     /// Switches the egg this server uses.  

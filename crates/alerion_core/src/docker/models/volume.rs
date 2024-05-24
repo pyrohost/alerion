@@ -7,7 +7,7 @@ use bollard::volume::{CreateVolumeOptions, RemoveVolumeOptions};
 use bollard::{models, Docker};
 use uuid::Uuid;
 
-use crate::servers::docker;
+use crate::docker;
 
 #[derive(Debug, Clone)]
 pub struct VolumeName {
