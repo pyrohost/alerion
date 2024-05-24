@@ -20,12 +20,10 @@ impl ActiveServer {
 
         server
     }
-    
+
     /// Begins a reinstallation task.
-    pub fn reinstall(&self) {
-    }
+    pub fn reinstall(&self) {}
 
     /// Forces an uninstallation task.
-    pub fn force_uninstall(&self) {
-    }
+    pub fn force_uninstall(&self) {}
 }

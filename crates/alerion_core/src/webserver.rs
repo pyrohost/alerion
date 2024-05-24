@@ -59,7 +59,10 @@ async fn initialize_websocket(
 }
 
 #[handler]
-async fn create_server(Json(options): Json<CreateServerRequest>, Data(server_pool): Data<&Arc<ServerPool>>) -> impl IntoResponse {
+async fn create_server(
+    Json(options): Json<CreateServerRequest>,
+    Data(server_pool): Data<&Arc<ServerPool>>,
+) -> impl IntoResponse {
     let _server = match server_pool.get(options.uuid).await {
         Some(s) => s,
         None => {
@@ -88,8 +91,8 @@ pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::
 
     let ws_endpoint = get(initialize_websocket);
 
-    let install_endpoint = post(create_server)
-        .with(BearerAuthMiddleware::new(config.auth.token.clone()));
+    let install_endpoint =
+        post(create_server).with(BearerAuthMiddleware::new(config.auth.token.clone()));
 
     let api = Route::new()
         .nest(

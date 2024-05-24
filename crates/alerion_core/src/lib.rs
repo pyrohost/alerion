@@ -2,12 +2,12 @@
 
 use std::sync::Arc;
 
+use anyhow::Context;
 use configuration::AlerionConfig;
 use futures::stream::{FuturesUnordered, StreamExt};
-use anyhow::Context;
 
+use crate::os::{DataDirectory, DataDirectoryImpl, User, UserImpl, PYRODACTYL_USER};
 use crate::servers::pool::ServerPool;
-use crate::os::{PYRODACTYL_USER, User, UserImpl, DataDirectory, DataDirectoryImpl};
 
 pub fn splash() {
     println!(
@@ -38,15 +38,15 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     tracing::info!("starting alerion");
 
-    DataDirectory::initialize()
-        .with_context(|| {
-            format!("failed to initialize data directory at {}", DataDirectory::path().display())
-        })?;
+    DataDirectory::initialize().with_context(|| {
+        format!(
+            "failed to initialize data directory at {}",
+            DataDirectory::path().display()
+        )
+    })?;
 
     User::ensure_exists()
-        .with_context(|| {
-            format!("failed to setup system user '{PYRODACTYL_USER}'")
-        })?;
+        .with_context(|| format!("failed to setup system user '{PYRODACTYL_USER}'"))?;
 
     let config = AlerionConfig::load().await?;
 
@@ -91,7 +91,7 @@ macro_rules! ensure {
 }
 
 pub mod configuration;
+pub mod os;
 pub mod servers;
 pub mod webserver;
 pub mod websocket;
-pub mod os;

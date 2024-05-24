@@ -1,11 +1,10 @@
-use std::path::PathBuf;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
-use std::borrow::Cow;
+use std::path::PathBuf;
 
-use bollard::Docker;
-use bollard::volume::{RemoveVolumeOptions, CreateVolumeOptions};
-use bollard::models;
+use bollard::volume::{CreateVolumeOptions, RemoveVolumeOptions};
+use bollard::{models, Docker};
 use uuid::Uuid;
 
 use crate::servers::docker;
@@ -24,11 +23,17 @@ impl fmt::Display for VolumeName {
 
 impl VolumeName {
     pub fn new_install(uuid: Uuid) -> Self {
-        Self { uuid, purpose: "install" }
+        Self {
+            uuid,
+            purpose: "install",
+        }
     }
 
     pub fn new_server(uuid: Uuid) -> Self {
-        Self { uuid, purpose: "server" }
+        Self {
+            uuid,
+            purpose: "server",
+        }
     }
 
     pub fn full_name(&self) -> String {
@@ -74,9 +79,7 @@ impl Volume {
             Err(e) => Err(e.into()),
             Ok(response) => Ok({
                 match response.labels.get(docker::ALERION_VERSION_LABEL) {
-                    None => {
-                        FoundVolume::Foreign(Box::new(response))
-                    },
+                    None => FoundVolume::Foreign(Box::new(response)),
                     Some(v) => {
                         let current_version = env!("CARGO_PKG_VERSION");
 
@@ -87,7 +90,7 @@ impl Volume {
                         FoundVolume::Some(Volume::from_datamodel(volname, response))
                     }
                 }
-            })
+            }),
         }
     }
 
@@ -129,14 +132,16 @@ impl Volume {
         let out = os_str.to_string_lossy();
 
         if matches!(out, Cow::Owned(_)) {
-            tracing::error!("verified volume mountpoint ({os_str:#?}) still contains invalid utf8 sequences");
+            tracing::error!(
+                "verified volume mountpoint ({os_str:#?}) still contains invalid utf8 sequences"
+            );
             tracing::error!("this is an internal bug: please contact support");
             tracing::error!("alerion may become unstable and/or break")
         }
 
         out
     }
-    
+
     pub fn to_docker_mount(&self, target: String) -> models::Mount {
         models::Mount {
             target: Some(target),
@@ -160,12 +165,9 @@ impl Volume {
 /// Useful if you don't have a `Volume` but
 /// still have volume metadata.
 pub async fn force_remove_by_name(api: &Docker, name: &str) -> docker::Result<()> {
-    let opts = RemoveVolumeOptions {
-        force: true,
-    };
+    let opts = RemoveVolumeOptions { force: true };
 
     api.remove_volume(name, Some(opts)).await?;
 
     Ok(())
 }
-

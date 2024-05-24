@@ -81,11 +81,7 @@ pub enum SendEventType {
     TransferStatus,
 }
 
-pub async fn websocket_handler(
-    stream: WebSocketStream,
-    _chan: ServerChannel,
-    uuid: Uuid,
-) {
+pub async fn websocket_handler(stream: WebSocketStream, _chan: ServerChannel, uuid: Uuid) {
     let (sink, mut stream) = stream.split();
     let sink = Arc::new(Mutex::new(sink));
 

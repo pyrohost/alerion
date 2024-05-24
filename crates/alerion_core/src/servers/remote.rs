@@ -25,7 +25,7 @@ pub enum ResponseError {
 }
 
 /// A wrapper around the pyrodactyl remote API.  
-/// 
+///
 /// Do **not** wrap it in an `Arc` or `Rc`, just clone it.
 #[derive(Clone, Debug)]
 pub struct Api {
@@ -68,8 +68,7 @@ impl Api {
         loop {
             let url = format!(
                 "{}/api/remote/servers?page={}&per_page=2",
-                self.remote,
-                page,
+                self.remote, page,
             );
 
             tracing::debug!("remote: GET {url}");
@@ -185,9 +184,7 @@ impl ServerApi {
         }
     }
 
-    pub async fn get_server_configuration(
-        &self,
-    ) -> Result<GetServerByUuidResponse, ResponseError> {
+    pub async fn get_server_configuration(&self) -> Result<GetServerByUuidResponse, ResponseError> {
         let url = format!(
             "{}/api/remote/servers/{}",
             self.api.remote,

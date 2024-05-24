@@ -18,7 +18,7 @@ pub enum ServerError {
     Conflict,
 }
 
-pub mod remote;
-pub mod pool;
-pub mod server;
 pub mod docker;
+pub mod pool;
+pub mod remote;
+pub mod server;

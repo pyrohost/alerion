@@ -1,7 +1,6 @@
-/// Stale for now.
-
-use std::sync::atomic::{AtomicU8, Ordering};
 use std::mem;
+/// Stale for now.
+use std::sync::atomic::{AtomicU8, Ordering};
 
 #[derive(Default, Debug, Clone, Copy)]
 #[repr(u8)]
@@ -49,9 +48,9 @@ impl AtomicState {
     }
 
     pub fn compare_exchange(&self, test: State, swap: State) -> Result<State, State> {
-        self.0.compare_exchange(test as u8, swap as u8, Ordering::SeqCst, Ordering::SeqCst)
+        self.0
+            .compare_exchange(test as u8, swap as u8, Ordering::SeqCst, Ordering::SeqCst)
             .map(|v| unsafe { State::from_u8_unchecked(v) })
             .map_err(|v| unsafe { State::from_u8_unchecked(v) })
     }
 }
-

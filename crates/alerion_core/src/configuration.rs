@@ -1,9 +1,10 @@
-use std::{net::IpAddr, path::Path};
 use std::io;
+use std::net::IpAddr;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use tokio::fs;
 use thiserror::Error;
+use tokio::fs;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AlerionApiSsl {
@@ -54,7 +55,10 @@ impl AlerionConfig {
         tracing::info!("creating configuration directory");
 
         let result = fs::create_dir_all(&CONFIG_PATH).await;
-        crate::ensure!(result, "failed to create configuration directory {CONFIG_PATH}");
+        crate::ensure!(
+            result,
+            "failed to create configuration directory {CONFIG_PATH}"
+        );
 
         tracing::info!("loading configuration from {}", path.display());
         let result = fs::read_to_string(path).await;

@@ -1,15 +1,16 @@
-use std::path::Path;
 use std::borrow::Cow;
+use std::ffi::{CStr, CString};
 use std::fs::{self, Permissions};
 use std::io;
-use std::process::Command;
-use std::os::unix::fs::PermissionsExt;
-use std::ffi::{CStr, CString};
 use std::mem::zeroed;
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
+use std::process::Command;
 use std::ptr::null_mut;
 
-use libc::{sysconf, gid_t, uid_t, getpwnam_r, _SC_GETPW_R_SIZE_MAX, ERANGE, __errno_location};
+use libc::{__errno_location, getpwnam_r, gid_t, sysconf, uid_t, ERANGE, _SC_GETPW_R_SIZE_MAX};
 use thiserror::Error;
+
 use super::PYRODACTYL_USER;
 
 #[derive(Debug, Error)]
@@ -34,7 +35,7 @@ pub struct User {
 }
 
 impl super::UserImpl for User {
-    fn ensure_exists() -> Result<Self, super::OsError> {        
+    fn ensure_exists() -> Result<Self, super::OsError> {
         let user_cstr = CString::new(PYRODACTYL_USER).expect("no null byte in PYRODACTYL_USER");
         let maybe_record = get_passwd_record(&user_cstr)?;
 
@@ -63,8 +64,8 @@ impl super::UserImpl for User {
                     }
                     maybe_code => {
                         tracing::error!("useradd failed with error code {maybe_code:#?}");
-                        return Err(super::OsError::Other); 
-                    },
+                        return Err(super::OsError::Other);
+                    }
                 }
 
                 let Some(record) = get_passwd_record(&user_cstr)? else {
@@ -86,7 +87,7 @@ impl super::UserImpl for User {
         Ok(format!("{}:{}", self.uid, self.gid))
     }
 }
- 
+
 pub struct DataDirectory;
 
 impl super::DataDirectoryImpl for DataDirectory {
@@ -97,7 +98,7 @@ impl super::DataDirectoryImpl for DataDirectory {
     fn initialize() -> Result<(), super::OsError> {
         let path = Self::path();
         fs::create_dir_all(&path)?;
-        
+
         let perms = Permissions::from_mode(0o700);
         fs::set_permissions(&path, perms)?;
 
@@ -105,7 +106,9 @@ impl super::DataDirectoryImpl for DataDirectory {
     }
 
     fn mounts() -> super::Mounts {
-        super::Mounts { path: Self::path().join("mounts") }
+        super::Mounts {
+            path: Self::path().join("mounts"),
+        }
     }
 }
 
@@ -138,11 +141,17 @@ fn get_passwd_record(uname: &CStr) -> Result<Option<(uid_t, gid_t)>, LibcError> 
             sizeguess = 2048;
         }
 
-        let mut bufsize = sizeguess as usize; 
+        let mut bufsize = sizeguess as usize;
         let mut buf = Vec::with_capacity(bufsize);
-        
+
         for _ in 0..5 {
-            let r = getpwnam_r(uname.as_ptr(), &mut passwd, buf.as_mut_ptr(), bufsize, &mut result);
+            let r = getpwnam_r(
+                uname.as_ptr(),
+                &mut passwd,
+                buf.as_mut_ptr(),
+                bufsize,
+                &mut result,
+            );
 
             if result.is_null() {
                 if r == ERANGE {
@@ -166,7 +175,9 @@ fn get_passwd_record(uname: &CStr) -> Result<Option<(uid_t, gid_t)>, LibcError> 
         }
 
         if result.is_null() {
-            let ctx = format!("INTERNAL ERROR (PLEASE REPORT): libc getpwnam_r keeps failing; can't get uid/gid");
+            let ctx = format!(
+                "INTERNAL ERROR (PLEASE REPORT): libc getpwnam_r keeps failing; can't get uid/gid"
+            );
             return Err(LibcError::with_ctx(ctx));
         }
 

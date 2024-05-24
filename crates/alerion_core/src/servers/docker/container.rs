@@ -1,20 +1,19 @@
 use std::fmt;
 
-use bollard::Docker;
+use bollard::container::{
+    AttachContainerOptions, AttachContainerResults, Config, CreateContainerOptions, InspectContainerOptions, RemoveContainerOptions, StartContainerOptions
+};
 use bollard::service::ContainerInspectResponse;
-use bollard::container::{AttachContainerOptions, AttachContainerResults, Config, CreateContainerOptions, InspectContainerOptions, RemoveContainerOptions, StartContainerOptions};
-use bollard::models;
-use tokio::task::JoinHandle;
-use uuid::Uuid;
+use bollard::{models, Docker};
 use futures::StreamExt;
 use tokio::fs;
+use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 use crate::os::PYRODACTYL_USER;
-use crate::servers::docker::{
-    self, DockerError,
-    volume::{self, VolumeName, Volume, FoundVolume},
-    bind_mount::BindMount,
-};
+use crate::servers::docker::bind_mount::BindMount;
+use crate::servers::docker::volume::{self, FoundVolume, Volume, VolumeName};
+use crate::servers::docker::{self, DockerError};
 
 #[derive(Debug, Clone)]
 pub struct ContainerName {
@@ -30,17 +29,23 @@ impl fmt::Display for ContainerName {
 
 impl ContainerName {
     pub fn new_install(uuid: Uuid) -> Self {
-        Self { uuid, purpose: "installer" }
+        Self {
+            uuid,
+            purpose: "installer",
+        }
     }
 
     pub fn new_server(uuid: Uuid) -> Self {
-        Self { uuid, purpose: "server" }
+        Self {
+            uuid,
+            purpose: "server",
+        }
     }
 
     pub fn full_name(&self) -> String {
         format!("{}_{}", self.uuid, self.purpose)
     }
-    
+
     pub fn short_uid(&self) -> String {
         format!("{:08x}", self.uuid.as_fields().0)
     }
@@ -60,9 +65,7 @@ pub struct Container {
 
 impl Container {
     pub async fn get<'a>(api: &Docker, name: ContainerName) -> docker::Result<FoundContainer> {
-        let opts = InspectContainerOptions {
-            size: false,
-        };
+        let opts = InspectContainerOptions { size: false };
 
         let result = api.inspect_container(&name.full_name(), Some(opts)).await;
 
@@ -78,7 +81,6 @@ impl Container {
             Ok(r) => r,
         };
 
-
         let Some(id) = response.id else {
             tracing::error!("missing container id from Docker Engine response");
             return Err(DockerError::BadResponse);
@@ -90,7 +92,7 @@ impl Container {
                 Some(ref c) => match c.labels {
                     Some(ref l) => l.get(docker::ALERION_VERSION_LABEL).cloned(),
                     None => None,
-                }
+                },
                 None => None,
             }
         };
@@ -100,7 +102,9 @@ impl Container {
         Ok(match version {
             Some(v) => {
                 if v != current_version {
-                    tracing::warn!("mismatched container version (found {v}, currently on {current_version})");
+                    tracing::warn!(
+                        "mismatched container version (found {v}, currently on {current_version})"
+                    );
                 }
 
                 FoundContainer::Some(Container {
@@ -109,12 +113,10 @@ impl Container {
                 })
             }
 
-            None => {
-                FoundContainer::Foreign(Box::new(ContainerInspectResponse {
-                    id: Some(id),
-                    ..response
-                }))
-            },
+            None => FoundContainer::Foreign(Box::new(ContainerInspectResponse {
+                id: Some(id),
+                ..response
+            })),
         })
     }
 
@@ -149,7 +151,9 @@ impl Container {
 
         let warnings = &response.warnings;
         if !warnings.is_empty() {
-            tracing::warn!("Docker emitted the following warnings after creating container {name:?}:");
+            tracing::warn!(
+                "Docker emitted the following warnings after creating container {name:?}:"
+            );
 
             for w in warnings {
                 tracing::warn!("{w}");
@@ -163,7 +167,8 @@ impl Container {
     }
 
     pub async fn start(&self, api: &Docker) -> docker::Result<()> {
-        api.start_container(&self.id, None::<StartContainerOptions::<String>>).await?;
+        api.start_container(&self.id, None::<StartContainerOptions<String>>)
+            .await?;
         Ok(())
     }
 
@@ -178,7 +183,10 @@ impl Container {
         };
 
         let streams = api.attach_container(&self.id, Some(opts)).await?;
-        let AttachContainerResults { input: _, mut output } = streams;
+        let AttachContainerResults {
+            input: _,
+            mut output,
+        } = streams;
 
         while let Some(result) = output.next().await {
             println!("{result:#?}");
@@ -229,16 +237,25 @@ pub async fn force_remove_by_name_or_id(api: &Docker, name_or_id: &str) -> docke
 /// 2. Create the installation container.
 /// 3. Start the container
 /// 4. Watch the container
-pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<JoinHandle<docker::Result<()>>> {
+pub async fn initiate_installation(
+    api: &Docker,
+    uuid: Uuid,
+) -> docker::Result<JoinHandle<docker::Result<()>>> {
     let install_volume = {
         let name = VolumeName::new_install(uuid);
 
         match Volume::get(api, name.clone()).await? {
             FoundVolume::Some(vol) => {
-                tracing::warn!("the installation volume was already created by alerion, but not deleted");
+                tracing::warn!(
+                    "the installation volume was already created by alerion, but not deleted"
+                );
                 tracing::warn!("creation time: {}", vol.created_at().unwrap_or("unknown"));
-                tracing::warn!("this signals alerion might have crashed during the installation process");
-                tracing::warn!("the volume will be force-deleted and the installation process will restart");
+                tracing::warn!(
+                    "this signals alerion might have crashed during the installation process"
+                );
+                tracing::warn!(
+                    "the volume will be force-deleted and the installation process will restart"
+                );
 
                 volume::force_remove_by_name(api, &name.full_name()).await?;
             }
@@ -246,7 +263,9 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
             FoundVolume::Foreign(resp) => {
                 tracing::warn!("the installation volume was already created, but not by alerion");
                 tracing::warn!("this might be an artifact from wings");
-                tracing::warn!("the volume will be force-deleted and the installation process will start");
+                tracing::warn!(
+                    "the volume will be force-deleted and the installation process will start"
+                );
 
                 tracing::debug!("Docker response body: {resp:#?}");
 
@@ -271,25 +290,32 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
         mount
     };
 
-
     let install_container = {
         let name = ContainerName::new_install(uuid);
 
         match Container::get(api, name.clone()).await? {
             FoundContainer::Some(cont) => {
-                tracing::warn!("the installation container already exists and was created by alerion");
+                tracing::warn!(
+                    "the installation container already exists and was created by alerion"
+                );
                 tracing::warn!("creation time: {}", cont.created_at().unwrap_or("unknown"));
                 tracing::warn!("this could either mean alerion crashed, or the installation");
                 tracing::warn!("process is not supposed to run right now and this is a bug");
-                tracing::warn!("the container will be deleted and the installation process will restart");
+                tracing::warn!(
+                    "the container will be deleted and the installation process will restart"
+                );
 
                 cont.force_remove(api).await?;
             }
 
             FoundContainer::Foreign(resp) => {
-                tracing::warn!("the installation container already exists, but wasn't created by alerion");
+                tracing::warn!(
+                    "the installation container already exists, but wasn't created by alerion"
+                );
                 tracing::warn!("this could be an artifact from wings");
-                tracing::warn!("the container will be deleted and the installation process will start");
+                tracing::warn!(
+                    "the container will be deleted and the installation process will start"
+                );
 
                 tracing::debug!("Docker response body: {resp:#?}");
 
@@ -301,7 +327,6 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
             }
         }
 
-        
         let volumes = vec![
             install_volume.to_docker_mount("/mnt/install".to_owned()),
             server_bind_mount.to_docker_mount("/mnt/server".to_owned()),
@@ -318,7 +343,6 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
         crate::ensure!(cont_fut.await, "failed to create installation container")
     };
 
-
     // put the installation script in the install volume
     let path = install_volume.mountpoint.join("install.sh");
     let script = br#"
@@ -333,7 +357,6 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
         tracing::error!("failed to write installation script: {e:?}");
         return Err(e.into());
     };
-
 
     if let Err(e) = install_container.start(api).await {
         tracing::error!("container failed to start: {e:?}");
@@ -350,4 +373,3 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
 
     Ok(handle)
 }
-

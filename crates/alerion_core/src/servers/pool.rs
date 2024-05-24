@@ -1,4 +1,5 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use bollard::Docker;
 use tokio::sync::RwLock;
@@ -46,7 +47,11 @@ impl ServerPool {
     }
 
     #[tracing::instrument(name = "create_server", skip(self))]
-    pub async fn create(&self, uuid: Uuid, start_on_completion: bool) -> Result<Arc<Server>, ServerError> {
+    pub async fn create(
+        &self,
+        uuid: Uuid,
+        start_on_completion: bool,
+    ) -> Result<Arc<Server>, ServerError> {
         let docker = Arc::clone(&self.docker);
 
         let server = Server::new(uuid, self.remote_api.clone(), docker);
@@ -61,4 +66,3 @@ impl ServerPool {
         self.servers.read().await.get(&uuid).cloned()
     }
 }
-

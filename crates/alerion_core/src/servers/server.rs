@@ -1,12 +1,12 @@
-use std::time::Instant;
 use std::sync::Arc;
+use std::time::Instant;
 
+pub use active::Egg;
 use bollard::Docker;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::servers::remote;
-pub use active::Egg;
 
 pub struct ServerChannel {
     antenna: broadcast::Receiver<ServerMessage>,
@@ -14,22 +14,16 @@ pub struct ServerChannel {
 
 #[derive(Clone, Debug)]
 pub enum ServerMessage {
-    ConsoleOutput {
-        output: Arc<String>,
-    },
+    ConsoleOutput { output: Arc<String> },
 
-    DaemonOutput {
-        output: Arc<String>,
-    },
+    DaemonOutput { output: Arc<String> },
 
-    DaemonError {
-        output: Arc<String>,
-    },
+    DaemonError { output: Arc<String> },
 }
 
 /// Pools all websocket connections attached to this server.   
 ///
-/// This is implemented in a sorta-stateless way using tokio's broadcast channels. 
+/// This is implemented in a sorta-stateless way using tokio's broadcast channels.
 /// The `WebsocketBucket` doesn't uniquely identify websocket connections. Doing so
 /// would introduce overhead and complexity, requiring atomics, locks and more channels.
 /// Broadcasting to many receivers is ultimately cheap since cloning messages is cheap.  
@@ -43,9 +37,7 @@ impl WebsocketBucket {
     pub fn new() -> Self {
         let (broadcaster, _) = broadcast::channel(64);
 
-        Self {
-            broadcaster,
-        }
+        Self { broadcaster }
     }
 
     /// "Adds" a receiver to this bucket. Just drop the returned `ServerChannel` to unsubscribe.
@@ -81,11 +73,7 @@ pub struct Server {
 
 impl Server {
     /// Creates a bare, uninitiated server.
-    pub fn new(
-        uuid: Uuid,
-        remote: remote::Api,
-        docker: Arc<Docker>,
-    ) -> Self {
+    pub fn new(uuid: Uuid, remote: remote::Api, docker: Arc<Docker>) -> Self {
         Server {
             start_time: Instant::now(),
             websocket: WebsocketBucket::new(),

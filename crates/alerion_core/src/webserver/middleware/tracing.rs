@@ -1,7 +1,7 @@
 use std::time::Instant;
 
-use tracing::{Instrument, Level};
 use poem::{Endpoint, IntoResponse, Middleware, Request, Response};
+use tracing::{Instrument, Level};
 
 /// Rewritten middleware for [`tracing`](https://crates.io/crates/tracing),
 /// originally from poem's `Tracing` middleware.

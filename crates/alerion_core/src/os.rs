@@ -1,10 +1,10 @@
-use std::path::{Path, PathBuf};
 use std::borrow::Cow;
 use std::io;
+use std::path::{Path, PathBuf};
 
+use futures::stream::{FuturesUnordered, StreamExt};
 use thiserror::Error;
 use uuid::Uuid;
-use futures::stream::{StreamExt, FuturesUnordered};
 
 pub const PYRODACTYL_USER: &str = "pyrodactyl";
 

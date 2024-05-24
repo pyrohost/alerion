@@ -1,13 +1,13 @@
-use std::path::PathBuf;
 use std::io;
+use std::path::PathBuf;
 
-use uuid::Uuid;
 use bollard::models;
 use bollard::secret::MountBindOptions;
-use futures::StreamExt;
 use futures::stream::FuturesUnordered;
+use futures::StreamExt;
+use uuid::Uuid;
 
-use crate::os::{DataDirectoryImpl, DataDirectory};
+use crate::os::{DataDirectory, DataDirectoryImpl};
 
 pub struct BindMount {
     path: PathBuf,
@@ -20,9 +20,7 @@ impl BindMount {
         let path = mounts.create_clean(uuid).await?;
         std::fs::create_dir_all(&path)?;
 
-        Ok(BindMount {
-            path,
-        })
+        Ok(BindMount { path })
     }
 
     /// Remove everything in the bind mount folder.
@@ -33,7 +31,9 @@ impl BindMount {
 
         loop {
             let result = read_dir.next_entry().await;
-            let Some(e) = result? else { break; };
+            let Some(e) = result? else {
+                break;
+            };
             let rm_fut = tokio::fs::remove_file(e.path());
             futures.push(rm_fut);
         }
@@ -57,12 +57,10 @@ impl BindMount {
                 non_recursive: Some(true),
                 create_mountpoint: None,
                 read_only_non_recursive: None,
-                read_only_force_recursive: None
+                read_only_force_recursive: None,
             }),
             volume_options: None,
             tmpfs_options: None,
         }
     }
 }
-
-

@@ -16,17 +16,23 @@ pub enum DockerError {
     #[error("Docker Engine sent back an improper response, cannot continue")]
     BadResponse,
     #[error("{0}")]
-    Io(#[from] io::Error)
+    Io(#[from] io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, DockerError>;
 
 fn is_404(err: &bollard::errors::Error) -> bool {
     use bollard::errors::Error::DockerResponseServerError;
-    matches!(err, DockerResponseServerError { status_code: 404, .. })
+    matches!(
+        err,
+        DockerResponseServerError {
+            status_code: 404,
+            ..
+        }
+    )
 }
 
+pub mod bind_mount;
 pub mod container;
 pub mod install;
 pub mod volume;
-pub mod bind_mount;

@@ -1,9 +1,9 @@
 // TODO: fix :sob:
 
-use std::path::Path;
 use std::borrow::Cow;
 use std::fs::{self, Permissions};
 use std::io;
+use std::path::Path;
 
 use thiserror::Error;
 
@@ -15,7 +15,7 @@ pub struct WinapiError {
 
 pub struct User;
 
-impl super::UserImpl for User { 
+impl super::UserImpl for User {
     fn ensure_exists() -> Result<Self, OsError> {
         unimplemented!()
     }
@@ -26,7 +26,7 @@ impl super::UserImpl for User {
 }
 
 impl super::OsError for WinapiError {}
- 
+
 pub struct DataDirectory;
 
 impl super::DataDirectoryImpl for DataDirectory {
@@ -39,14 +39,16 @@ impl super::DataDirectoryImpl for DataDirectory {
     fn initialize() -> Result<(), super::EnvErrorImpl<Self::OsError>> {
         let path = Self::path();
         fs::create_dir_all(path)?;
-        
+
         // TODO: Windows Permissions (??)
 
         Ok(())
     }
 
     fn mounts() -> super::Mounts {
-        super::Mounts { path: Self::path().join("Mounts") }
+        super::Mounts {
+            path: Self::path().join("Mounts"),
+        }
     }
 }
 
