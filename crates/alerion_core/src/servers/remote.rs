@@ -24,13 +24,16 @@ pub enum ResponseError {
     Unknown(StatusCode),
 }
 
-/// A wrapper around the simple pyrodactyl remote API
-pub struct RemoteClient {
+/// A wrapper around the pyrodactyl remote API.  
+/// 
+/// Do **not** wrap it in an `Arc` or `Rc`, just clone it.
+#[derive(Clone, Debug)]
+pub struct Api {
     remote: String,
     http: reqwest::Client,
 }
 
-impl RemoteClient {
+impl Api {
     pub fn new(config: &AlerionConfig) -> Result<Self, ResponseError> {
         let token_id = &config.auth.token_id;
         let token = &config.auth.token;
@@ -58,9 +61,22 @@ impl RemoteClient {
         })
     }
 
+    pub fn server_api(&self, uuid: Uuid) -> ServerApi {
+        ServerApi {
+            uuid,
+            api: self.clone(),
+        }
+    }
+}
+
+pub struct ServerApi {
+    uuid: Uuid,
+    api: Api,
+}
+
+impl ServerApi {
     pub async fn post_installation_status(
         &self,
-        uuid: Uuid,
         successful: bool,
         reinstall: bool,
     ) -> Result<(), ResponseError> {
@@ -71,13 +87,14 @@ impl RemoteClient {
 
         let url = format!(
             "{}/api/remote/servers/{}/install",
-            self.remote,
-            uuid.as_hyphenated()
+            self.api.remote,
+            self.uuid.as_hyphenated(),
         );
 
         tracing::debug!("remote: POST {url}");
 
         let resp = self
+            .api
             .http
             .post(url)
             .body(serde_json::to_string(&req).expect("JSON serialization should not fail"))
@@ -85,7 +102,7 @@ impl RemoteClient {
             .await?;
 
         if resp.status() == StatusCode::NOT_FOUND {
-            Err(ResponseError::NotFound(uuid))
+            Err(ResponseError::NotFound(self.uuid))
         } else {
             Ok(())
         }
@@ -97,13 +114,13 @@ impl RemoteClient {
     ) -> Result<GetServerInstallByUuidResponse, ResponseError> {
         let url = format!(
             "{}/api/remote/servers/{}/install",
-            self.remote,
-            uuid.as_hyphenated()
+            self.api.remote,
+            self.uuid.as_hyphenated()
         );
 
         tracing::debug!("remote: GET {url}");
 
-        let resp = self.http.get(url).send().await?;
+        let resp = self.api.http.get(url).send().await?;
 
         match resp.status() {
             StatusCode::NOT_FOUND => Err(ResponseError::NotFound(uuid)),
@@ -125,13 +142,13 @@ impl RemoteClient {
     ) -> Result<GetServerByUuidResponse, ResponseError> {
         let url = format!(
             "{}/api/remote/servers/{}",
-            self.remote,
-            uuid.as_hyphenated()
+            self.api.remote,
+            self.uuid.as_hyphenated()
         );
 
         tracing::debug!("remote: GET {url}");
 
-        let resp = self.http.get(url).send().await?;
+        let resp = self.api.http.get(url).send().await?;
 
         match resp.status() {
             StatusCode::NOT_FOUND => Err(ResponseError::NotFound(uuid)),
@@ -154,12 +171,13 @@ impl RemoteClient {
         loop {
             let url = format!(
                 "{}/api/remote/servers?page={}&per_page=2",
-                self.remote, page
+                self.api.remote,
+                page,
             );
 
             tracing::debug!("remote: GET {url}");
 
-            let resp = self.http.get(url).send().await?;
+            let resp = self.api.http.get(url).send().await?;
 
             let parsed = match resp.status() {
                 StatusCode::UNAUTHORIZED => Err(ResponseError::Unauthorized),
@@ -172,7 +190,6 @@ impl RemoteClient {
 
                 _ => {
                     let status = resp.status();
-                    //log::debug!("{}", resp.text().await.unwrap());
                     Err(ResponseError::Unknown(status))
                 }
             };
