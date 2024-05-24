@@ -94,4 +94,3 @@ pub mod configuration;
 pub mod os;
 pub mod servers;
 pub mod webserver;
-pub mod websocket;
