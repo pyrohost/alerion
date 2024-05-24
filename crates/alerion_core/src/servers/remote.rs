@@ -160,7 +160,6 @@ impl ServerApi {
 
     pub async fn get_install_instructions(
         &self,
-        uuid: Uuid,
     ) -> Result<GetServerInstallByUuidResponse, ResponseError> {
         let url = format!(
             "{}/api/remote/servers/{}/install",
@@ -173,7 +172,7 @@ impl ServerApi {
         let resp = self.api.http.get(url).send().await?;
 
         match resp.status() {
-            StatusCode::NOT_FOUND => Err(ResponseError::NotFound(uuid)),
+            StatusCode::NOT_FOUND => Err(ResponseError::NotFound(self.uuid)),
             StatusCode::UNAUTHORIZED => Err(ResponseError::Unauthorized),
             StatusCode::OK => {
                 let bytes = resp.bytes().await?;
@@ -188,7 +187,6 @@ impl ServerApi {
 
     pub async fn get_server_configuration(
         &self,
-        uuid: Uuid,
     ) -> Result<GetServerByUuidResponse, ResponseError> {
         let url = format!(
             "{}/api/remote/servers/{}",
@@ -201,7 +199,7 @@ impl ServerApi {
         let resp = self.api.http.get(url).send().await?;
 
         match resp.status() {
-            StatusCode::NOT_FOUND => Err(ResponseError::NotFound(uuid)),
+            StatusCode::NOT_FOUND => Err(ResponseError::NotFound(self.uuid)),
             StatusCode::UNAUTHORIZED => Err(ResponseError::Unauthorized),
             StatusCode::OK => {
                 let bytes = resp.bytes().await?;
