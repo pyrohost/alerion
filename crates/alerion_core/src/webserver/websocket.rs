@@ -3,8 +3,10 @@ use std::sync::Arc;
 use futures::stream::{SplitSink, StreamExt};
 use poem::web::websocket::{Message, WebSocketStream};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::Mutex;
 use uuid::Uuid;
+
+use crate::servers::server::ServerChannel;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecvWebsocketEvent {
@@ -81,7 +83,7 @@ pub enum SendEventType {
 
 pub async fn websocket_handler(
     stream: WebSocketStream,
-    _recv: mpsc::Receiver<SendWebsocketEvent>,
+    _chan: ServerChannel,
     uuid: Uuid,
 ) {
     let (sink, mut stream) = stream.split();

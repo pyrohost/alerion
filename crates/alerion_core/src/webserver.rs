@@ -49,9 +49,9 @@ async fn initialize_websocket(
     ws: WebSocket,
 ) -> impl IntoResponse {
     if let Some(server) = server_pool.get(uuid).await {
-        let recv = server.add_websocket().await;
+        let chan = server.websocket.add();
 
-        ws.on_upgrade(move |mut socket| websocket::websocket_handler(socket, recv, uuid))
+        ws.on_upgrade(move |mut socket| websocket::websocket_handler(socket, chan, uuid))
             .into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()

@@ -38,7 +38,7 @@ impl BindMount {
             futures.push(rm_fut);
         }
 
-        for r in futures.next().await {
+        while let Some(r) = futures.next().await {
             r?;
         }
 

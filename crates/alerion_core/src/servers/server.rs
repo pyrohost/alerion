@@ -57,7 +57,8 @@ impl WebsocketBucket {
 
     /// Broadcast a message to all receivers.
     pub fn broadcast(&self, msg: ServerMessage) {
-        self.broadcaster.send(msg);
+        // an error means there are no receivers ready, which is fine
+        let _ = self.broadcaster.send(msg);
     }
 }
 
@@ -99,8 +100,8 @@ impl Server {
     ///
     /// If it was using another egg before, this will forcefully
     /// stop and uninstall the server.
-    pub fn switch_egg(&mut self, egg: Egg) {
-        if let State::Active(active) = self.state {
+    pub fn switch_egg(&mut self, _egg: Egg) {
+        if let State::Active(ref active) = self.state {
             active.force_uninstall();
         }
     }

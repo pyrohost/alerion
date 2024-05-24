@@ -96,10 +96,10 @@ impl super::DataDirectoryImpl for DataDirectory {
 
     fn initialize() -> Result<(), super::OsError> {
         let path = Self::path();
-        fs::create_dir_all(path)?;
+        fs::create_dir_all(&path)?;
         
         let perms = Permissions::from_mode(0o700);
-        fs::set_permissions(path, perms)?;
+        fs::set_permissions(&path, perms)?;
 
         Ok(())
     }

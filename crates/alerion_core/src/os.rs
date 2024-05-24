@@ -75,8 +75,8 @@ impl Mounts {
         let uuid = format!("{}", uuid.as_hyphenated());
         let path = self.path.join(&uuid);
 
-        tokio::fs::create_dir_all(&path).await;
-        clear_directory(&path).await;
+        tokio::fs::create_dir_all(&path).await?;
+        clear_directory(&path).await?;
 
         Ok(path)
     }

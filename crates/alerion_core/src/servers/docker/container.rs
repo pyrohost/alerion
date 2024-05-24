@@ -265,11 +265,10 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
     };
 
     let server_bind_mount = {
-        let mount = BindMount::new(uuid);
         tracing::info!("creating server bind mount");
+        let mount = BindMount::new(uuid).await?;
 
-        let vol_fut = Volume::create(api, name);
-        crate::ensure!(vol_fut.await, "failed to create server volume")
+        mount
     };
 
 
@@ -305,7 +304,7 @@ pub async fn initiate_installation(api: &Docker, uuid: Uuid) -> docker::Result<J
         
         let volumes = vec![
             install_volume.to_docker_mount("/mnt/install".to_owned()),
-            server_volume.to_docker_mount("/mnt/server".to_owned()),
+            server_bind_mount.to_docker_mount("/mnt/server".to_owned()),
         ];
 
         let host_cfg = models::HostConfig {
