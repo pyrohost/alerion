@@ -175,10 +175,8 @@ fn get_passwd_record(uname: &CStr) -> Result<Option<(uid_t, gid_t)>, LibcError> 
         }
 
         if result.is_null() {
-            let ctx = format!(
-                "INTERNAL ERROR (PLEASE REPORT): libc getpwnam_r keeps failing; can't get uid/gid"
-            );
-            return Err(LibcError::with_ctx(ctx));
+            let ctx = "INTERNAL ERROR (PLEASE REPORT): libc getpwnam_r keeps failing; can't get uid/gid";
+            return Err(LibcError::with_ctx(ctx.to_owned()));
         }
 
         let gid = passwd.pw_gid;
