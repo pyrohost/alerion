@@ -1,3 +1,4 @@
+#[derive(Debug, Clone, Copy)]
 pub enum State {
     Installing,
     Installed,
@@ -6,6 +7,7 @@ pub enum State {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Egg;
 
+#[derive(Debug)]
 pub struct ActiveServer {
     egg: Egg,
     state: State,
