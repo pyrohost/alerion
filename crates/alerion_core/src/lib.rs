@@ -4,8 +4,10 @@ use std::sync::Arc;
 
 use configuration::AlerionConfig;
 use futures::stream::{FuturesUnordered, StreamExt};
+use anyhow::Context;
 
 use crate::servers::pool::ServerPool;
+use crate::os::{PYRODACTYL_USER, User, UserImpl, DataDirectory, DataDirectoryImpl};
 
 pub fn splash() {
     println!(
@@ -36,7 +38,15 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     tracing::info!("starting alerion");
 
-    servers::docker::environment::setup()?;
+    DataDirectory::initialize()
+        .with_context(|| {
+            format!("failed to initialize data directory at {}", DataDirectory::path().display())
+        })?;
+
+    User::ensure_exists()
+        .with_context(|| {
+            format!("failed to setup system user '{PYRODACTYL_USER}'")
+        })?;
 
     let config = AlerionConfig::load().await?;
 
