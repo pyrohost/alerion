@@ -61,6 +61,56 @@ impl Api {
         })
     }
 
+    pub async fn get_servers(&self) -> Result<Vec<ServerData>, ResponseError> {
+        let mut servers: Option<Vec<ServerData>> = None;
+        let mut page = 1;
+
+        loop {
+            let url = format!(
+                "{}/api/remote/servers?page={}&per_page=2",
+                self.remote,
+                page,
+            );
+
+            tracing::debug!("remote: GET {url}");
+
+            let resp = self.http.get(url).send().await?;
+
+            let parsed = match resp.status() {
+                StatusCode::UNAUTHORIZED => Err(ResponseError::Unauthorized),
+                StatusCode::OK => {
+                    let bytes = resp.bytes().await?;
+
+                    serde_json::from_slice::<GetServersResponse>(&bytes)
+                        .map_err(ResponseError::InvalidJson)
+                }
+
+                _ => {
+                    let status = resp.status();
+                    Err(ResponseError::Unknown(status))
+                }
+            };
+
+            let mut parsed = parsed?;
+
+            let server_data = mem::take(&mut parsed.data);
+
+            servers = Some(match servers {
+                None => server_data,
+                Some(mut s) => {
+                    s.extend(server_data);
+                    s
+                }
+            });
+
+            if parsed.meta.current_page == parsed.meta.last_page {
+                return Ok(unsafe { servers.unwrap_unchecked() });
+            }
+
+            page += 1;
+        }
+    }
+
     pub fn server_api(&self, uuid: Uuid) -> ServerApi {
         ServerApi {
             uuid,
@@ -161,56 +211,6 @@ impl ServerApi {
             }
 
             _ => Err(ResponseError::Unknown(resp.status())),
-        }
-    }
-
-    pub async fn get_servers(&self) -> Result<Vec<ServerData>, ResponseError> {
-        let mut servers: Option<Vec<ServerData>> = None;
-        let mut page = 1;
-
-        loop {
-            let url = format!(
-                "{}/api/remote/servers?page={}&per_page=2",
-                self.api.remote,
-                page,
-            );
-
-            tracing::debug!("remote: GET {url}");
-
-            let resp = self.api.http.get(url).send().await?;
-
-            let parsed = match resp.status() {
-                StatusCode::UNAUTHORIZED => Err(ResponseError::Unauthorized),
-                StatusCode::OK => {
-                    let bytes = resp.bytes().await?;
-
-                    serde_json::from_slice::<GetServersResponse>(&bytes)
-                        .map_err(ResponseError::InvalidJson)
-                }
-
-                _ => {
-                    let status = resp.status();
-                    Err(ResponseError::Unknown(status))
-                }
-            };
-
-            let mut parsed = parsed?;
-
-            let server_data = mem::take(&mut parsed.data);
-
-            servers = Some(match servers {
-                None => server_data,
-                Some(mut s) => {
-                    s.extend(server_data);
-                    s
-                }
-            });
-
-            if parsed.meta.current_page == parsed.meta.last_page {
-                return Ok(unsafe { servers.unwrap_unchecked() });
-            }
-
-            page += 1;
         }
     }
 }
