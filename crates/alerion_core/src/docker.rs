@@ -1,12 +1,18 @@
 use std::collections::HashMap;
 use std::io;
+use std::hash::Hash;
 
 use thiserror::Error;
 
 const ALERION_VERSION_LABEL: &str = "host.pyro.alerion-version";
 
-fn alerion_version_labels() -> HashMap<&'static str, &'static str> {
-    HashMap::from([(ALERION_VERSION_LABEL, env!("CARGO_PKG_VERSION"))])
+fn alerion_version_labels<T>() -> HashMap<T, T>
+where
+    T: From<&'static str> + PartialEq + Eq + Hash,
+{
+    HashMap::from([
+        (ALERION_VERSION_LABEL.into(), env!("CARGO_PKG_VERSION").into())
+    ])
 }
 
 #[derive(Debug, Error)]
