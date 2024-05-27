@@ -1,10 +1,7 @@
-use std::borrow::Cow;
 use std::ffi::{CStr, CString};
-use std::fs::{self, Permissions};
-use std::io;
 use std::mem::zeroed;
-use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::env;
+use std::path::{PathBuf, Path};
 use std::process::Command;
 use std::ptr::null_mut;
 
@@ -88,45 +85,18 @@ impl super::UserImpl for User {
     }
 }
 
-pub struct DataDirectory;
+pub struct ConfigPath;
 
-impl super::DataDirectoryImpl for DataDirectory {
-    fn path() -> Cow<'static, Path> {
-        Cow::Borrowed(Path::new("/var/lib/alerion"))
+impl super::ConfigPathImpl for ConfigPath {
+    fn parent() -> Result<PathBuf, (env::VarError, &'static str)> {
+        const VAR: &str = "XDG_CONFIG_HOME";
+        let value = env::var(VAR).map_err(|e| (e, VAR))?;
+        let path = Path::new(&value);
+        Ok(path.join("alerion"))
     }
 
-    fn initialize() -> Result<(), super::OsError> {
-        let path = Self::path();
-        fs::create_dir_all(&path)?;
-
-        let perms = Permissions::from_mode(0o700);
-        fs::set_permissions(&path, perms)?;
-
-        Ok(())
-    }
-
-    fn mounts() -> super::Mounts {
-        super::Mounts {
-            path: Self::path().join("mounts"),
-        }
-    }
-}
-
-pub struct ConfigFile;
-
-impl super::ConfigFileImpl for ConfigFile {
-    fn path() -> Cow<'static, Path> {
-        Cow::Borrowed(Path::new("/etc/alerion/config.json"))
-    }
-
-    fn read() -> io::Result<String> {
-        let contents = fs::read_to_string(Self::path())?;
-        Ok(contents)
-    }
-
-    fn write(contents: &str) -> io::Result<()> {
-        fs::write(Self::path(), contents)?;
-        Ok(())
+    fn node() -> &'static str {
+        "config.json"
     }
 }
 

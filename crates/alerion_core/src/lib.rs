@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use configuration::AlerionConfig;
+use fs::AlerionConfig;
 use futures::stream::{FuturesUnordered, StreamExt};
 
 use crate::os::{DataDirectory, DataDirectoryImpl, User, UserImpl, PYRODACTYL_USER};
@@ -90,7 +90,7 @@ macro_rules! ensure {
     }
 }
 
-pub mod configuration;
+pub mod fs;
 pub mod os;
 pub mod servers;
 pub mod webserver;

@@ -122,6 +122,10 @@ impl Server {
             active.force_uninstall();
         }
     }
+
+    pub(crate) fn docker_api(&self) -> &Docker {
+        &self.docker
+    }
 }
 
 pub mod active;

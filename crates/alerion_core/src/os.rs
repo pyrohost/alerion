@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::env;
 
 use futures::stream::{FuturesUnordered, StreamExt};
 use thiserror::Error;
@@ -15,16 +16,10 @@ pub type User = unix::User;
 pub type User = windows::User;
 
 #[cfg(unix)]
-pub type DataDirectory = unix::DataDirectory;
+pub type ConfigPath = unix::ConfigPath;
 
 #[cfg(windows)]
-pub type DataDirectory = windows::DataDirectory;
-
-#[cfg(unix)]
-pub type ConfigFile = unix::ConfigFile;
-
-#[cfg(windows)]
-pub type ConfigFile = windows::ConfigFile;
+pub type ConfigPath = windows::ConfigPath;
 
 #[cfg(unix)]
 pub type OsLibraryError = unix::LibcError;
@@ -47,23 +42,9 @@ pub trait UserImpl: Sized {
     fn host_uname(&self) -> Result<String, OsError>;
 }
 
-pub trait DataDirectoryImpl {
-    /// The path the data directory uses.  
-    ///
-    /// `/var/lib/alerion` on Unix.
-    fn path() -> Cow<'static, Path>;
-
-    /// Ensures the directory exists and sets the correct permissions.
-    fn initialize() -> Result<(), OsError>;
-
-    /// A handle on bind mounts.
-    fn mounts() -> Mounts;
-}
-
-pub trait ConfigFileImpl {
-    fn path() -> Cow<'static, Path>;
-    fn read() -> io::Result<String>;
-    fn write(contents: &str) -> io::Result<()>;
+pub trait ConfigPathImpl {
+    fn parent() -> Result<PathBuf, (env::VarError, &'static str)>;
+    fn node() -> &'static str;
 }
 
 pub struct Mounts {
