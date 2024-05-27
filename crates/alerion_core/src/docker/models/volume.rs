@@ -2,12 +2,14 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
+use std::future::Future;
 
 use bollard::volume::{CreateVolumeOptions, RemoveVolumeOptions};
 use bollard::{models, Docker};
 use uuid::Uuid;
 
 use crate::docker;
+use super::{Inspectable, Inspected};
 
 #[derive(Debug, Clone)]
 pub struct VolumeName {
@@ -41,59 +43,51 @@ impl VolumeName {
     }
 }
 
-pub enum FoundVolume {
-    Some(Volume),
-    // models::Volume is ~600 bytes
-    Foreign(Box<models::Volume>),
-    None,
-}
-
 /// An alerion-created volume
 pub struct Volume {
+    /// The name of the volume.
     pub name: VolumeName,
-    /// The mountpoint of the volume, for use with `POST /containers/create` and to
-    /// write necessary files to.
-    pub mountpoint: PathBuf,
-    /// Creation time of the volume. Only present if the volume was recovered
-    /// and Docker responded with this information.
-    created_at: Option<String>,
+    /// Creation time of the volume.
+    pub created_at: Option<String>,
+}
+
+impl Inspectable for Volume {
+    type Model = models::Volume;
+    type Ref = VolumeName;
+
+    fn inspect(
+        api: &Docker,
+        args: Self::Ref,
+    ) -> impl Future<Output = docker::Result<Inspected<Self>>> {
+        async move {            
+            let result = api.inspect_volume(&args.full_name()).await;
+
+            match result {
+                Err(e) if docker::is_404(&e) => Ok(Inspected::None),
+                Err(e) => Err(e.into()),
+                Ok(response) => Ok({
+                    match response.labels.get(docker::ALERION_VERSION_LABEL) {
+                        None => Inspected::Invalid(Box::new(response)),
+                        Some(v) => {
+                            let current_version = env!("CARGO_PKG_VERSION");
+
+                            if v != current_version {
+                                tracing::warn!("mismatched volume version (found {v}, currently on {current_version})");
+                            }
+
+                            Inspected::Some(Volume {
+                                name: args,
+                                created_at: response.created_at,
+                            })
+                        }
+                    }
+                }),
+            }
+        }
+    }
 }
 
 impl Volume {
-    fn from_datamodel(name: VolumeName, resp: models::Volume) -> Self {
-        Self {
-            name,
-            mountpoint: PathBuf::from(resp.mountpoint),
-            created_at: resp.created_at,
-        }
-    }
-
-    /// Checks if a specified volume already exists.
-    ///
-    /// Returns an error if the mountpoint contains invalid utf-8 sequences.
-    pub async fn get(api: &Docker, volname: VolumeName) -> docker::Result<FoundVolume> {
-        let result = api.inspect_volume(&volname.full_name()).await;
-
-        match result {
-            Err(e) if docker::is_404(&e) => Ok(FoundVolume::None),
-            Err(e) => Err(e.into()),
-            Ok(response) => Ok({
-                match response.labels.get(docker::ALERION_VERSION_LABEL) {
-                    None => FoundVolume::Foreign(Box::new(response)),
-                    Some(v) => {
-                        let current_version = env!("CARGO_PKG_VERSION");
-
-                        if v != current_version {
-                            tracing::warn!("mismatched volume version (found {v}, currently on {current_version})");
-                        }
-
-                        FoundVolume::Some(Volume::from_datamodel(volname, response))
-                    }
-                }
-            }),
-        }
-    }
-
     /// Forces the creation of a volume with the given name. If the volume already
     /// exists, an error will be returned.  
     ///
@@ -114,8 +108,7 @@ impl Volume {
 
         Ok(Volume {
             name: volname,
-            mountpoint: PathBuf::from(volume.mountpoint),
-            created_at: None,
+            created_at: volume.created_at,
         })
     }
 
@@ -123,23 +116,6 @@ impl Volume {
     /// remove a volume.
     pub async fn force_remove(&self, api: &Docker) -> docker::Result<()> {
         force_remove_by_name(api, &self.name.full_name()).await
-    }
-
-    /// Returns the mountpoint as a string. Warns if the mountpoint contains
-    /// invalid utf-8 sequences, although that'd be a bug.
-    pub fn mountpoint_as_str(&self) -> Cow<str> {
-        let os_str = self.mountpoint.as_os_str();
-        let out = os_str.to_string_lossy();
-
-        if matches!(out, Cow::Owned(_)) {
-            tracing::error!(
-                "verified volume mountpoint ({os_str:#?}) still contains invalid utf8 sequences"
-            );
-            tracing::error!("this is an internal bug: please contact support");
-            tracing::error!("alerion may become unstable and/or break")
-        }
-
-        out
     }
 
     pub fn to_docker_mount(&self, target: String) -> models::Mount {

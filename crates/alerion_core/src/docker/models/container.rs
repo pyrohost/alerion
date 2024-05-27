@@ -1,4 +1,5 @@
 use std::fmt;
+use std::future::Future;
 
 use bollard::container::{
     AttachContainerOptions, AttachContainerResults, Config, CreateContainerOptions, InspectContainerOptions, RemoveContainerOptions, StartContainerOptions
@@ -10,6 +11,7 @@ use uuid::Uuid;
 
 use crate::os::PYRODACTYL_USER;
 use crate::docker::{self, DockerError, is_404};
+use super::{Inspected, Inspectable};
 
 #[derive(Debug, Clone)]
 pub struct ContainerName {
@@ -47,75 +49,78 @@ impl ContainerName {
     }
 }
 
-pub enum FoundContainer {
-    Some(Container),
-    // ContainerInspectResponse is ~3KB
-    Foreign(Box<ContainerInspectResponse>),
-    None,
-}
-
 pub struct Container {
     id: String,
     created_at: Option<String>,
 }
 
-impl Container {
-    pub async fn get<'a>(api: &Docker, name: ContainerName) -> docker::Result<FoundContainer> {
-        let opts = InspectContainerOptions { size: false };
+impl Inspectable for Container {
+    type Model = ContainerInspectResponse;
+    type Ref = ContainerName;
 
-        let result = api.inspect_container(&name.full_name(), Some(opts)).await;
+    fn inspect(
+        api: &Docker,
+        args: Self::Ref,
+    ) -> impl Future<Output = docker::Result<Inspected<Self>>> {
+        async move {
+            let opts = InspectContainerOptions { size: false };
 
-        let response = match result {
-            Err(e) if is_404(&e) => {
-                return Ok(FoundContainer::None);
-            }
+            let result = api.inspect_container(&args.full_name(), Some(opts)).await;
 
-            Err(e) => {
-                return Err(e.into());
-            }
-
-            Ok(r) => r,
-        };
-
-        let Some(id) = response.id else {
-            tracing::error!("missing container id from Docker Engine response");
-            return Err(DockerError::BadResponse);
-        };
-
-        // this is to avoid a partial move of `response`
-        let version = {
-            match response.config {
-                Some(ref c) => match c.labels {
-                    Some(ref l) => l.get(docker::ALERION_VERSION_LABEL).cloned(),
-                    None => None,
-                },
-                None => None,
-            }
-        };
-
-        let current_version = env!("CARGO_PKG_VERSION");
-
-        Ok(match version {
-            Some(v) => {
-                if v != current_version {
-                    tracing::warn!(
-                        "mismatched container version (found {v}, currently on {current_version})"
-                    );
+            let response = match result {
+                Err(e) if is_404(&e) => {
+                    return Ok(Inspected::None);
                 }
 
-                FoundContainer::Some(Container {
-                    id,
-                    created_at: response.created,
-                })
-            }
+                Err(e) => {
+                    return Err(e.into());
+                }
 
-            None => FoundContainer::Foreign(Box::new(ContainerInspectResponse {
-                id: Some(id),
-                ..response
-            })),
-        })
+                Ok(r) => r,
+            };
+
+            let Some(id) = response.id else {
+                tracing::error!("missing container id from Docker Engine response");
+                return Err(DockerError::BadResponse);
+            };
+
+            // this is to avoid a partial move of `response`
+            let version = {
+                match response.config {
+                    Some(ref c) => match c.labels {
+                        Some(ref l) => l.get(docker::ALERION_VERSION_LABEL).cloned(),
+                        None => None,
+                    },
+                    None => None,
+                }
+            };
+
+            let current_version = env!("CARGO_PKG_VERSION");
+
+            Ok(match version {
+                Some(v) => {
+                    if v != current_version {
+                        tracing::warn!(
+                            "mismatched container version (found {v}, currently on {current_version})"
+                        );
+                    }
+
+                    Inspected::Some(Container {
+                        id,
+                        created_at: response.created,
+                    })
+                }
+
+                None => Inspected::Invalid(Box::new(ContainerInspectResponse {
+                    id: Some(id),
+                    ..response
+                })),
+            })
+        }
     }
+}
 
+impl Container {
     pub async fn create(
         api: &Docker,
         name: ContainerName,

@@ -1,5 +1,6 @@
 use std::io;
 use std::path::PathBuf;
+use std::fmt;
 
 use bollard::models;
 use bollard::secret::MountBindOptions;
@@ -9,18 +10,41 @@ use uuid::Uuid;
 
 use crate::os::{DataDirectory, DataDirectoryImpl};
 
+#[derive(Debug, Clone)]
+pub struct BindMountName {
+    uuid: Uuid,
+    purpose: &'static str,
+}
+
+impl fmt::Display for BindMountName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}_{}", self.uuid.as_hyphenated(), self.purpose)
+    }
+}
+
+impl BindMountName {
+    pub fn new_installer(uuid: Uuid) -> Self {
+        Self { uuid, purpose: "installer" }
+    }
+
+    pub fn new_server(uuid: Uuid) -> Self {
+        Self { uuid, purpose: "server" }
+    }
+}
+
 pub struct BindMount {
+    name: BindMountName,
     path: PathBuf,
 }
 
 impl BindMount {
     /// Creates/resets a bind mount.
-    pub async fn new(uuid: Uuid) -> io::Result<BindMount> {
+    pub async fn new_clean(name: BindMountName) -> io::Result<BindMount> {
         let mounts = DataDirectory::mounts();
-        let path = mounts.create_clean(uuid).await?;
+        let path = mounts.create_clean(name.uuid).await?;
         std::fs::create_dir_all(&path)?;
 
-        Ok(BindMount { path })
+        Ok(BindMount { path, name })
     }
 
     /// Remove everything in the bind mount folder.
