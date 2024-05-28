@@ -1,15 +1,18 @@
 use std::fmt;
-use std::future::Future;
+use std::hash::Hash;
+use std::pin::Pin;
 
 use bollard::container::{
-    AttachContainerOptions, AttachContainerResults, Config, CreateContainerOptions, InspectContainerOptions, RemoveContainerOptions, StartContainerOptions
+    AttachContainerOptions, AttachContainerResults, Config, CreateContainerOptions, InspectContainerOptions, LogOutput, RemoveContainerOptions, StartContainerOptions
 };
 use bollard::service::ContainerInspectResponse;
-use bollard::{models, Docker};
-use futures::StreamExt;
+use bollard::errors::Error as BollardError;
+use bollard::Docker;
+use futures::Stream;
 use uuid::Uuid;
+use serde::Serialize;
+use tokio::io::AsyncWrite;
 
-use crate::os::PYRODACTYL_USER;
 use crate::docker::{self, DockerError, is_404};
 use super::{Inspected, Inspectable};
 
@@ -58,97 +61,81 @@ impl Inspectable for Container {
     type Model = ContainerInspectResponse;
     type Ref = ContainerName;
 
-    fn inspect(
+    async fn inspect(
         api: &Docker,
         args: Self::Ref,
-    ) -> impl Future<Output = docker::Result<Inspected<Self>>> {
-        async move {
-            let opts = InspectContainerOptions { size: false };
+    ) -> docker::Result<Inspected<Self>> {    
+        let opts = InspectContainerOptions { size: false };
 
-            let result = api.inspect_container(&args.full_name(), Some(opts)).await;
+        let result = api.inspect_container(&args.full_name(), Some(opts)).await;
 
-            let response = match result {
-                Err(e) if is_404(&e) => {
-                    return Ok(Inspected::None);
-                }
+        let response = match result {
+            Err(e) if is_404(&e) => {
+                return Ok(Inspected::None);
+            }
 
-                Err(e) => {
-                    return Err(e.into());
-                }
+            Err(e) => {
+                return Err(e.into());
+            }
 
-                Ok(r) => r,
-            };
+            Ok(r) => r,
+        };
 
-            let Some(id) = response.id else {
-                tracing::error!("missing container id from Docker Engine response");
-                return Err(DockerError::BadResponse);
-            };
+        let Some(id) = response.id else {
+            tracing::error!("missing container id from Docker Engine response");
+            return Err(DockerError::BadResponse);
+        };
 
-            // this is to avoid a partial move of `response`
-            let version = {
-                match response.config {
-                    Some(ref c) => match c.labels {
-                        Some(ref l) => l.get(docker::ALERION_VERSION_LABEL).cloned(),
-                        None => None,
-                    },
+        // this is to avoid a partial move of `response`
+        let version = {
+            match response.config {
+                Some(ref c) => match c.labels {
+                    Some(ref l) => l.get(docker::ALERION_VERSION_LABEL).cloned(),
                     None => None,
-                }
-            };
+                },
+                None => None,
+            }
+        };
 
-            let current_version = env!("CARGO_PKG_VERSION");
+        let current_version = env!("CARGO_PKG_VERSION");
 
-            Ok(match version {
-                Some(v) => {
-                    if v != current_version {
-                        tracing::warn!(
-                            "mismatched container version (found {v}, currently on {current_version})"
-                        );
-                    }
-
-                    Inspected::Some(Container {
-                        id,
-                        created_at: response.created,
-                    })
+        Ok(match version {
+            Some(v) => {
+                if v != current_version {
+                    tracing::warn!(
+                        "mismatched container version (found {v}, currently on {current_version})"
+                    );
                 }
 
-                None => Inspected::Invalid(Box::new(ContainerInspectResponse {
-                    id: Some(id),
-                    ..response
-                })),
-            })
-        }
+                Inspected::Some(Container {
+                    id,
+                    created_at: response.created,
+                })
+            }
+
+            None => Inspected::Invalid(Box::new(ContainerInspectResponse {
+                id: Some(id),
+                ..response
+            })),
+        })
     }
 }
 
 impl Container {
-    pub async fn create(
+    pub async fn create<Z>(
         api: &Docker,
         name: ContainerName,
-        host_config: models::HostConfig,
-    ) -> docker::Result<Container> {
+        config: Config<Z>,
+    ) -> docker::Result<Container>
+    where
+        Z: Into<String> + Eq + Hash + Serialize,
+    {
         let opts = CreateContainerOptions {
             name: name.full_name(),
             platform: None,
         };
 
-        let hostname = name.short_uid();
-
-        let cfg = Config {
-            hostname: Some(hostname.as_str()),
-            user: Some(PYRODACTYL_USER),
-            attach_stdin: Some(true),
-            attach_stdout: Some(true),
-            attach_stderr: Some(true),
-            open_stdin: Some(true),
-            image: Some("ghcr.io/pterodactyl/installers:alpine"),
-            cmd: Some(vec!["ash", "/mnt/install/install.sh"]),
-            env: Some(vec!["SUBJECT=world"]),
-            host_config: Some(host_config),
-            labels: Some(docker::alerion_version_labels()),
-            ..Config::default()
-        };
-
-        let response = api.create_container(Some(opts), cfg).await?;
+        let response = api.create_container(Some(opts), config).await?;
 
         let warnings = &response.warnings;
         if !warnings.is_empty() {
@@ -173,9 +160,17 @@ impl Container {
         Ok(())
     }
 
-    pub async fn attach(&self, api: &Docker) -> docker::Result<()> {
+    pub async fn attach(
+        &self,
+        api: &Docker,
+        attach_stdin: bool,
+    ) -> docker::Result<(
+            Pin<Box<dyn AsyncWrite + Send>>,
+            Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+        )>
+    {
         let opts = AttachContainerOptions {
-            stdin: Some(true),
+            stdin: Some(attach_stdin),
             stdout: Some(true),
             stderr: Some(true),
             stream: Some(true),
@@ -185,17 +180,17 @@ impl Container {
 
         let streams = api.attach_container(&self.id, Some(opts)).await?;
         let AttachContainerResults {
-            input: _,
-            mut output,
+            input,
+            output,
         } = streams;
 
-        while let Some(result) = output.next().await {
-            println!("{result:#?}");
-        }
+        Ok((input, output))
+    }
 
-        tracing::info!("closed");
-
-        Ok(())
+    pub async fn inspect_existing(&self, api: &Docker) -> docker::Result<ContainerInspectResponse> {
+        let opts = InspectContainerOptions { size: false };
+        let resp = api.inspect_container(&self.id, Some(opts)).await?;
+        Ok(resp)
     }
 
     /// Uses [`force_remove_by_name_or_id`].
@@ -217,10 +212,12 @@ pub async fn force_remove_by_name_or_id(api: &Docker, name_or_id: &str) -> docke
     let opts = RemoveContainerOptions {
         force: true,
         v: true,
-        link: true,
+        link: false,
     };
 
+    println!("deleting");
     api.remove_container(name_or_id, Some(opts)).await?;
+    println!("deleted");
 
     Ok(())
 }

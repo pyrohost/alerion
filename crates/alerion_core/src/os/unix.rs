@@ -89,10 +89,10 @@ pub struct ConfigPath;
 
 impl super::ConfigPathImpl for ConfigPath {
     fn parent() -> Result<PathBuf, (env::VarError, &'static str)> {
-        const VAR: &str = "XDG_CONFIG_HOME";
+        const VAR: &str = "HOME";
         let value = env::var(VAR).map_err(|e| (e, VAR))?;
         let path = Path::new(&value);
-        Ok(path.join("alerion"))
+        Ok(path.join(".config").join("alerion"))
     }
 
     fn node() -> &'static str {

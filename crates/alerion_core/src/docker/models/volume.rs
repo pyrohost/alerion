@@ -1,8 +1,5 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
-use std::path::PathBuf;
-use std::future::Future;
 
 use bollard::volume::{CreateVolumeOptions, RemoveVolumeOptions};
 use bollard::{models, Docker};
@@ -55,34 +52,32 @@ impl Inspectable for Volume {
     type Model = models::Volume;
     type Ref = VolumeName;
 
-    fn inspect(
+    async fn inspect(
         api: &Docker,
         args: Self::Ref,
-    ) -> impl Future<Output = docker::Result<Inspected<Self>>> {
-        async move {            
-            let result = api.inspect_volume(&args.full_name()).await;
+    ) -> docker::Result<Inspected<Self>> {
+        let result = api.inspect_volume(&args.full_name()).await;
 
-            match result {
-                Err(e) if docker::is_404(&e) => Ok(Inspected::None),
-                Err(e) => Err(e.into()),
-                Ok(response) => Ok({
-                    match response.labels.get(docker::ALERION_VERSION_LABEL) {
-                        None => Inspected::Invalid(Box::new(response)),
-                        Some(v) => {
-                            let current_version = env!("CARGO_PKG_VERSION");
+        match result {
+            Err(e) if docker::is_404(&e) => Ok(Inspected::None),
+            Err(e) => Err(e.into()),
+            Ok(response) => Ok({
+                match response.labels.get(docker::ALERION_VERSION_LABEL) {
+                    None => Inspected::Invalid(Box::new(response)),
+                    Some(v) => {
+                        let current_version = env!("CARGO_PKG_VERSION");
 
-                            if v != current_version {
-                                tracing::warn!("mismatched volume version (found {v}, currently on {current_version})");
-                            }
-
-                            Inspected::Some(Volume {
-                                name: args,
-                                created_at: response.created_at,
-                            })
+                        if v != current_version {
+                            tracing::warn!("mismatched volume version (found {v}, currently on {current_version})");
                         }
+
+                        Inspected::Some(Volume {
+                            name: args,
+                            created_at: response.created_at,
+                        })
                     }
-                }),
-            }
+                }
+            }),
         }
     }
 }

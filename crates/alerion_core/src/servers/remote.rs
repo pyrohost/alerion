@@ -8,7 +8,7 @@ use reqwest::StatusCode;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::configuration::AlerionConfig;
+use crate::fs::Config;
 
 #[derive(Debug, Error)]
 pub enum ResponseError {
@@ -34,7 +34,7 @@ pub struct Api {
 }
 
 impl Api {
-    pub fn new(config: &AlerionConfig) -> Result<Self, ResponseError> {
+    pub fn new(config: &Config) -> Result<Self, ResponseError> {
         let token_id = &config.auth.token_id;
         let token = &config.auth.token;
 
@@ -146,7 +146,7 @@ impl ServerApi {
             .api
             .http
             .post(url)
-            .body(serde_json::to_string(&req).expect("JSON serialization should not fail"))
+            .json(&req)
             .send()
             .await?;
 

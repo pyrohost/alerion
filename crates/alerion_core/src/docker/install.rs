@@ -1,16 +1,21 @@
 use std::collections::HashMap;
+use std::path::Path;
+use std::io;
+use std::borrow::Cow;
+use std::sync::Arc;
 
-use tokio::task::JoinHandle;
+use bollard::container::LogOutput;
+use bollard::errors::Error as BollardError;
+use futures::{Stream, StreamExt};
 use tokio::fs;
-use bollard::{models, Docker};
-use uuid::Uuid;
+use bollard::models;
 
 use alerion_datamodel::remote::server::{GetServerByUuidResponse, GetServerInstallByUuidResponse};
-use crate::servers::Server;
-use crate::os::{User, UserImpl};
+use crate::docker::models::bind_mount::BindMountName;
+use crate::servers::server::{Server, State, OutboundMessage};
 use crate::docker::{
     self,
-    models::{volume, container, Inspectable, Inspected, Volume, VolumeName, BindMount, Container, ContainerName},
+    models::{container, Inspectable, Inspected, BindMount, Container, ContainerName},
 };
 
 const INSTALLER_SCRIPT_NAME: &str = "installer.sh";
@@ -25,48 +30,22 @@ const MIB_TO_BYTES: i64 = 1000 * 1000;
 ///
 /// If this is a reinstall, delete the involved containers and volumes beforehand
 /// to avoid warnings being emitted.  
-pub async fn process(
-    server: &Server,
+pub async fn engage(
+    server: &Arc<Server>,
     server_cfg: &GetServerByUuidResponse, 
-) -> docker::Result<JoinHandle<docker::Result<()>>> {
+    install_cfg: GetServerInstallByUuidResponse,
+) -> docker::Result<()> {
     let uuid = server.uuid;
     let api = server.docker_api();
+    let localdata = server.localdata();
 
-    // 1. Installation volume
-    //
-    // This uses a named volume.
-    let install_volume = {
-        let name = VolumeName::new_install(uuid);
+    let mounts = localdata.mounts();
 
-        match Volume::inspect(api, name.clone()).await? {
-            Inspected::Some(vol) => {
-                tracing::warn!("the installation volume was already created by alerion, but not deleted");
-                tracing::warn!("creation time: {}", vol.created_at().unwrap_or("unknown"));
-                tracing::warn!("this signals alerion might have crashed during the installation process");
-                tracing::warn!("the volume will be force-deleted and the installation process will restart");
-
-                volume::force_remove_by_name(api, &name.full_name()).await?;
-            }
-
-            Inspected::Invalid(resp) => {
-                tracing::warn!("the installation volume was already created, but not by alerion");
-                tracing::warn!("this might be an artifact from wings");
-                tracing::warn!("the volume will be force-deleted and the installation process will start");
-
-                tracing::debug!("Docker response body: {resp:#?}");
-
-                volume::force_remove_by_name(api, &name.full_name()).await?;
-            }
-
-            Inspected::None => {
-                tracing::debug!("installation volume not found: OK");
-            }
-        }
-
-        tracing::info!("creating installation volume");
-
-        let vol_fut = Volume::create(api, name);
-        crate::ensure!(vol_fut.await, "failed to create server volume")
+    // 1. Installation mount
+    let install_mount = {
+        tracing::debug!("creating installer bind mount");
+        let name = BindMountName::new_installer(uuid);
+        BindMount::new_clean(&mounts, name).await?
     };
 
     // 2. Create the server's bind mount.
@@ -74,12 +53,20 @@ pub async fn process(
     // Make sure it's empty; at this point, its contents should be backed up/ready to be lost.
     // This uses a bind mount because we need the flexibility that those provide (support
     // being modified by the host.)
-    let server_bind_mount = {
-        tracing::info!("creating server bind mount");
-        BindMount::new_clean(uuid).await?
+    let server_mount = {
+        tracing::debug!("creating server bind mount");
+        let name = BindMountName::new_server(uuid);
+        BindMount::new_clean(&mounts, name).await?
     };
 
+
     // 3. Create the container for the installation process
+    let GetServerInstallByUuidResponse {
+        container_image,
+        entrypoint,
+        script,
+    } = install_cfg;
+
     let install_container = {
         let name = ContainerName::new_install(uuid);
 
@@ -87,7 +74,7 @@ pub async fn process(
             Inspected::Some(cont) => {
                 tracing::warn!("the installation container already exists and was created by alerion");
                 tracing::warn!("creation time: {}", cont.created_at().unwrap_or("unknown"));
-                tracing::warn!("this could either mean alerion crashed, or the installation");
+                tracing::warn!("this could either mean alerion crashed, or the installation failed");
                 tracing::warn!("the container will be deleted and the installation process will restart");
 
                 cont.force_remove(api).await?;
@@ -109,50 +96,134 @@ pub async fn process(
         }
 
         let volumes = vec![
-            install_volume.to_docker_mount("/mnt/install".to_owned()),
-            server_bind_mount.to_docker_mount("/mnt/server".to_owned()),
+            install_mount.to_docker_mount("/mnt/install".to_owned()),
+            server_mount.to_docker_mount("/mnt/server".to_owned()),
         ];
-
-        let host_cfg = models::HostConfig {
-            mounts: Some(volumes),
-            ..models::HostConfig::default()
-        };
 
         tracing::info!("creating installation container");
 
-        let cont_fut = Container::create(api, name, host_cfg);
+        let config = docker_install_container_config(
+            &name,
+            server_cfg,
+            entrypoint,
+            container_image,
+            volumes,
+        );
+
+        tracing::debug!("{config:#?}");
+
+        let cont_fut = Container::create(api, name, config);
         crate::ensure!(cont_fut.await, "failed to create installation container")
     };
 
     // put the installation script in the install volume
-    let path = install_volume.mountpoint.join("install.sh");
-    let script = br#"
-    echo "hello, $SUBJECT!"
-    whoami
-    pwd
-    touch tmpfile
-    cd /mnt/server
-    echo ok > serverfile.txt
-    "#;
-    if let Err(e) = fs::write(path, script).await {
-        tracing::error!("failed to write installation script: {e:?}");
+    let script_normalized = normalize_script(&script);
+    if let Err(e) = installer_script(install_mount.path(), &script_normalized).await {
+        tracing::error!("failed to write installation script to container mountpoint: {e}");
         return Err(e.into());
-    };
+    }
 
     if let Err(e) = install_container.start(api).await {
         tracing::error!("container failed to start: {e:?}");
         return Err(e);
     }
 
-    let monitor_api = api.clone();
-    let handle = tokio::spawn(async move {
-        let attach_fut = install_container.attach(&monitor_api);
-        crate::ensure!(attach_fut.await, "failed to attach to container");
+    // spawn a monitoring task
+    {
+        let server = Arc::clone(server);
+        let api = api.clone();
+        tokio::spawn(async move {
+            let result = install_container.attach(&api, false).await; 
 
-        Ok(())
-    });
+            let (_input, mut output) = match result {
+                Ok(tuple) => tuple,
+                Err(e) => {
+                    tracing::error!("failed to attach to container: {e}");
+                    return;
+                }
+            };
 
-    Ok(handle)
+            monitor(&server, &mut output).await;
+
+            let mut success = true;
+
+            match install_container.inspect_existing(&api).await {
+                Ok(resp) => {
+                    if let Some(code) = resp.state.and_then(|s| s.exit_code) {
+                        if code == 0 {
+                            tracing::info!("server installed successfully");
+                        } else {
+                            tracing::error!("failed to install server (exit={code})");
+                            success = false;
+                        }
+                    } else {
+                        tracing::error!("cannot get exit code of the installer");
+                        tracing::error!("assuming success");
+                    }
+                }
+
+                Err(e) => {
+                    tracing::error!("failed to inspect docker container after installation: {e}");
+                    tracing::error!("assuming success");
+                }
+            }
+
+            *server.state.lock() = State::Installed;
+
+            match server.set_installation_status(success).await {
+                Ok(()) => tracing::debug!("notified remote API of installation status"),
+                Err(e) => tracing::error!("couldn't notify the panel about the installation status: {e}"),
+            }
+        });
+    }
+
+    tracing::info!("server installation process successfully engaged");
+
+    Ok(())
+}
+
+#[tracing::instrument(skip_all, name = "monitor_installer")]
+async fn monitor(
+    server: &Arc<Server>,
+    stream: &mut (dyn Stream<Item = Result<LogOutput, BollardError>> + Unpin + Send),
+) {
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok(output) => {
+                let bytes = output.into_bytes();
+                let sanitized = Arc::new(sanitize_output(&bytes));
+
+                let msg = OutboundMessage::install_output(sanitized);
+                server.websocket.broadcast(msg);
+            },
+
+            Err(e) => {
+                tracing::error!("failed to read output stream: {e}");
+            }
+        }
+    }
+}
+
+/// Sanitizes the given bytes to remove bad control characters
+fn sanitize_output(bytes: &[u8]) -> String {
+    // would be better if it didn't strip colors and stuff but oh well
+
+    // strip controls except whitespaces
+    String::from_utf8_lossy(bytes)
+        .as_ref()
+        .chars()
+        // REPLACEMENT_CHARACTER.is_whitespace() == false
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .collect::<String>()
+}
+
+async fn installer_script(mount_path: &Path, contents: &str) -> io::Result<()> {
+    let path = mount_path.join(INSTALLER_SCRIPT_NAME);
+    tracing::debug!("writing installer at '{}'", path.display());
+
+    fs::write(path, contents).await?;
+
+    Ok(())
 }
 
 fn docker_install_container_config(
@@ -160,7 +231,6 @@ fn docker_install_container_config(
     cfg: &GetServerByUuidResponse,
     entrypoint: String,
     image: String,
-    username: String,
     mounts: Vec<models::Mount>,
 ) -> bollard::container::Config<String> {
     let env = format_environment_for_docker(&cfg.settings.environment);
@@ -170,7 +240,7 @@ fn docker_install_container_config(
         hostname: Some(name.short_uid()),
         // only relevant if using NIS, not relevant here
         domainname: None,
-        user: Some(username),
+        user: Some("0:0".to_owned()),
         attach_stdin: Some(true),
         attach_stdout: Some(true),
         attach_stderr: Some(true),
@@ -185,8 +255,7 @@ fn docker_install_container_config(
         args_escaped: Some(true),
         image: Some(image),
         volumes: None,
-        // the installer script doesn't assume any starting working dir
-        working_dir: None,
+        working_dir: Some("/mnt/install".to_owned()),
         // no need for an entrypoint, using `Cmd` instead
         entrypoint: None,
         network_disabled: Some(false),
@@ -239,6 +308,7 @@ fn docker_install_container_config(
                 cpu_quota,
                 oom_kill_disable: Some(build.oom_disabled),
                 mounts: Some(mounts),
+                userns_mode: None,
                 // TODO: Config option
                 pids_limit: Some(256),
                 // We should use rootless docker
@@ -250,6 +320,19 @@ fn docker_install_container_config(
     }
 }
 
+fn normalize_script(script: &str) -> String {
+    // replace ALL carriage returns, not just those prefixed with newlines
+    script.replace('\r', "\n")
+}
+
 fn format_environment_for_docker(env: &HashMap<String, serde_json::Value>) -> Vec<String> {
-    env.into_iter().map(|(k, v)| format!("{k}={v}")).collect()
+    env.iter().map(|(k, v)| {
+        // now we hope the env variables won't create security issues!
+        // TODO
+        let value = v.as_str()
+            .map(Cow::Borrowed)
+            .unwrap_or_else(|| Cow::Owned(format!("{v}")));
+
+        format!("{k}={value}")
+    }).collect()
 }

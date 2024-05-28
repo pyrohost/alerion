@@ -1,34 +1,32 @@
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::fmt;
 
 use bollard::models;
 use bollard::secret::MountBindOptions;
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
 use uuid::Uuid;
 
-use crate::os::{DataDirectory, DataDirectoryImpl};
+use crate::fs::{MountType, Mounts};
 
 #[derive(Debug, Clone)]
 pub struct BindMountName {
     uuid: Uuid,
-    purpose: &'static str,
+    typ: MountType,
 }
 
 impl fmt::Display for BindMountName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}_{}", self.uuid.as_hyphenated(), self.purpose)
+        write!(f, "{}_{}", self.uuid.as_hyphenated(), self.typ)
     }
 }
 
 impl BindMountName {
     pub fn new_installer(uuid: Uuid) -> Self {
-        Self { uuid, purpose: "installer" }
+        Self { uuid, typ: MountType::Installer }
     }
 
     pub fn new_server(uuid: Uuid) -> Self {
-        Self { uuid, purpose: "server" }
+        Self { uuid, typ: MountType::Server }
     }
 }
 
@@ -39,34 +37,14 @@ pub struct BindMount {
 
 impl BindMount {
     /// Creates/resets a bind mount.
-    pub async fn new_clean(name: BindMountName) -> io::Result<BindMount> {
-        let mounts = DataDirectory::mounts();
-        let path = mounts.create_clean(name.uuid).await?;
-        std::fs::create_dir_all(&path)?;
+    pub async fn new_clean(mounts: &Mounts, name: BindMountName) -> io::Result<BindMount> {
+        let path = mounts.force_recreate(name.uuid, name.typ).await?;
 
         Ok(BindMount { path, name })
     }
 
-    /// Remove everything in the bind mount folder.
-    pub async fn clean(&self) -> io::Result<()> {
-        let mut read_dir = tokio::fs::read_dir(&self.path).await?;
-
-        let mut futures = FuturesUnordered::new();
-
-        loop {
-            let result = read_dir.next_entry().await;
-            let Some(e) = result? else {
-                break;
-            };
-            let rm_fut = tokio::fs::remove_file(e.path());
-            futures.push(rm_fut);
-        }
-
-        while let Some(r) = futures.next().await {
-            r?;
-        }
-
-        Ok(())
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
     }
 
     pub fn to_docker_mount(&self, target: String) -> models::Mount {

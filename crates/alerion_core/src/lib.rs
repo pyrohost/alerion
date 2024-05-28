@@ -2,12 +2,11 @@
 
 use std::sync::Arc;
 
-use anyhow::Context;
-use fs::AlerionConfig;
+use fs::config::Config;
 use futures::stream::{FuturesUnordered, StreamExt};
 
-use crate::os::{DataDirectory, DataDirectoryImpl, User, UserImpl, PYRODACTYL_USER};
 use crate::servers::pool::ServerPool;
+use crate::fs::LocalData;
 
 pub fn splash() {
     println!(
@@ -38,24 +37,14 @@ pub async fn alerion_main() -> anyhow::Result<()> {
 
     tracing::info!("starting alerion");
 
-    DataDirectory::initialize().with_context(|| {
-        format!(
-            "failed to initialize data directory at {}",
-            DataDirectory::path().display()
-        )
-    })?;
+    let config = Config::load()?;
+    let localdata = LocalData::new(config.data_dir.clone())?;
 
-    User::ensure_exists()
-        .with_context(|| format!("failed to setup system user '{PYRODACTYL_USER}'"))?;
-
-    let config = AlerionConfig::load().await?;
-
-    let server_pool = ServerPool::new(&config).await?;
-    let server_pool = Arc::new(server_pool);
+    let server_pool = ServerPool::new(&config, localdata.clone()).await?;
 
     let webserver_handle = tokio::spawn(async move {
         let cfg = config.clone();
-        let result = webserver::serve(&cfg, Arc::clone(&server_pool)).await;
+        let result = webserver::serve(cfg, Arc::clone(&server_pool)).await;
 
         match result {
             Ok(()) => tracing::info!("webserver exited gracefully"),

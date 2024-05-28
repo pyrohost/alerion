@@ -14,7 +14,7 @@ use sysinfo::System;
 use uuid::Uuid;
 
 use self::middleware::bearer_auth::BearerAuthMiddleware;
-use crate::configuration::AlerionConfig;
+use crate::fs::Config;
 use crate::servers::pool::ServerPool;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,13 +46,18 @@ async fn get_system_info() -> impl IntoResponse {
 async fn initialize_websocket(
     Path(uuid): Path<Uuid>,
     Data(server_pool): Data<&Arc<ServerPool>>,
+    Data(config): Data<&Config>,
     ws: WebSocket,
 ) -> impl IntoResponse {
     if let Some(server) = server_pool.get(uuid).await {
-        let chan = server.websocket.add();
+        let auth = websocket::auth::Auth::from_config(config);
 
-        ws.on_upgrade(move |mut socket| websocket::websocket_handler(socket, chan, uuid))
-            .into_response()
+        let resp = ws.on_upgrade(move |mut socket| {
+            tracing::info!("upgraded websocket");
+            websocket::websocket_handler(server, socket, uuid, auth)
+        });
+
+        resp.into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
     }
@@ -81,7 +86,7 @@ async fn create_server(
     ().into_response()
 }
 
-pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::Result<()> {
+pub async fn serve(config: Config, server_pool: Arc<ServerPool>) -> io::Result<()> {
     // TODO: restrict origins
     let cors = Cors::new().allow_credentials(true);
 
@@ -94,6 +99,8 @@ pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::
     let install_endpoint =
         post(create_server).with(BearerAuthMiddleware::new(config.auth.token.clone()));
 
+    let bound = (config.api.host, config.api.port);
+
     let api = Route::new()
         .nest(
             "api",
@@ -104,9 +111,10 @@ pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::
         )
         .with(cors)
         .with(middleware::tracing::Tracing)
+        .data(config)
         .data(server_pool);
 
-    Server::new(TcpListener::bind((config.api.host, config.api.port)))
+    Server::new(TcpListener::bind(bound))
         .run(api)
         .await
 }

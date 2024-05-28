@@ -2,6 +2,7 @@ use std::net::IpAddr;
 use std::io;
 use std::env;
 use std::fs;
+use std::path::PathBuf;
 
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
@@ -53,6 +54,7 @@ pub struct Authentication {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub debug: bool,
+    pub data_dir: PathBuf,
     pub uuid: String,
     pub api: Api,
     pub auth: Authentication,
@@ -63,7 +65,7 @@ impl Config {
     pub fn load() -> Result<Self, ConfigError> {
         let folder = ConfigPath::parent()?;
 
-        fs::create_dir_all(folder);
+        fs::create_dir_all(&folder)?;
 
         let config_path = folder.join(ConfigPath::node());
 

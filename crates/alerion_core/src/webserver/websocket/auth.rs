@@ -5,7 +5,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::configuration::AlerionConfig;
+use crate::fs::Config;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -92,7 +92,7 @@ pub struct Auth {
 }
 
 impl Auth {
-    pub fn from_config(cfg: &AlerionConfig) -> Self {
+    pub fn from_config(cfg: &Config) -> Self {
         let mut validation = Validation::new(Algorithm::HS256);
 
         let spec_claims = ["exp", "nbf", "aud", "iss"].map(ToOwned::to_owned);
@@ -104,7 +104,7 @@ impl Auth {
         validation.validate_nbf = false;
         validation.validate_aud = false;
         validation.aud = None;
-        validation.iss = Some(HashSet::from([cfg.remote.clone()]));
+        validation.iss = None;
         validation.sub = None;
 
         let key = DecodingKey::from_secret(cfg.auth.token.as_ref());
@@ -112,10 +112,13 @@ impl Auth {
         Self { validation, key }
     }
 
-    pub fn validate(&self, auth: &str, server_uuid: &Uuid) -> Option<Permissions> {
-        jsonwebtoken::decode::<Claims>(auth, &self.key, &self.validation)
-            .ok()
-            .filter(|result| &result.claims.server_uuid == server_uuid)
-            .map(|result| Permissions::from_strings(&result.claims.permissions))
+    pub fn validate(&self, auth: &str) -> Result<Permissions, jsonwebtoken::errors::Error> {
+        let r = jsonwebtoken::decode::<Claims>(auth, &self.key, &self.validation);
+
+        if let Err(ref e) = r {
+            tracing::error!("auth error: {e:#?}");
+        }
+
+        r.map(|result| Permissions::from_strings(&result.claims.permissions))
     }
 }
