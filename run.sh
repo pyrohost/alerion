@@ -1,7 +1,7 @@
 #!/bin/sh
 
 cargo build
-if [ $? ]; then
+if [ $? -eq 0 ]; then
 	export RUST_LOG=debug
 	export RUST_BACKTRACE=full
 	target/debug/alerion_cli
