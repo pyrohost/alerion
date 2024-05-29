@@ -30,6 +30,7 @@ impl BindMountName {
     }
 }
 
+#[allow(dead_code)]
 pub struct BindMount {
     name: BindMountName,
     path: PathBuf,

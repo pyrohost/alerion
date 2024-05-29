@@ -15,11 +15,11 @@ const BACKUPS: &str = "backups";
 const LOGS: &str = "logs";
 
 #[derive(Debug, Clone)]
-pub struct LocalData {
+pub struct LocalDataHandle {
     path: PathBuf,
 }
 
-impl LocalData {
+impl LocalDataHandle {
     pub async fn new(path: PathBuf) -> io::Result<Self> {
         tokio::try_join!(
             fs::create_dir_all(path.join(MOUNTS)),
@@ -27,7 +27,7 @@ impl LocalData {
             fs::create_dir_all(path.join(LOGS)),
         )?;
 
-        Ok(LocalData {
+        Ok(LocalDataHandle {
             path
         })
     }

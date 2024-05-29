@@ -1,16 +1,15 @@
 use std::sync::Arc;
 use std::time::Instant;
-use std::io;
 
 use bollard::Docker;
-use tokio::sync::{Mutex as TokioMutex, mpsc, broadcast};
+use tokio::sync::{mpsc, broadcast};
 use uuid::Uuid;
 use alerion_datamodel as dm;
 use parking_lot::Mutex as PlMutex;
 use serde::Serialize;
 
 use crate::servers::remote;
-use crate::fs::{FsLogger, LocalData, LogFileInterface};
+use crate::fs::{FsLogger, LocalDataHandle, LogFileInterface};
 use crate::docker;
 
 use super::ServerError;
@@ -137,13 +136,13 @@ pub struct Server {
     pub(crate) proc_state: PlMutex<ProcState>,
     remote: remote::ServerApi,
     docker: Arc<Docker>,
-    localdata: LocalData,
+    localdata: LocalDataHandle,
     logger: FsLogger,
 }
 
 impl Server {
     /// Creates a bare, uninitiated server.
-    pub async fn new(uuid: Uuid, remote: remote::Api, docker: Arc<Docker>, localdata: LocalData) -> Result<Arc<Self>, ServerError> {
+    pub async fn new(uuid: Uuid, remote: remote::Api, docker: Arc<Docker>, localdata: LocalDataHandle) -> Result<Arc<Self>, ServerError> {
         let (websocket, mut ws_receiver) = WebsocketBucket::new();
 
         let server = Arc::new(Server {
@@ -199,7 +198,7 @@ impl Server {
         &self.docker
     }
 
-    pub(crate) fn localdata(&self) -> &LocalData {
+    pub(crate) fn localdata(&self) -> &LocalDataHandle {
         &self.localdata
     }
 

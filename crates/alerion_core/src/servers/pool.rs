@@ -5,7 +5,7 @@ use bollard::Docker;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::fs::{LocalData, Config};
+use crate::fs::{LocalDataHandle, Config};
 use crate::servers::{remote, ServerError, Server};
 use crate::docker;
 
@@ -13,11 +13,11 @@ pub struct ServerPool {
     servers: RwLock<HashMap<Uuid, Arc<Server>>>,
     remote_api: remote::Api,
     docker: Arc<Docker>,
-    localdata: LocalData,
+    localdata: LocalDataHandle,
 }
 
 impl ServerPool {
-    pub async fn new(config: &Config, localdata: LocalData) -> Result<Arc<Self>, ServerError> {
+    pub async fn new(config: &Config, localdata: LocalDataHandle) -> Result<Arc<Self>, ServerError> {
         let remote_api = remote::Api::new(config)?;
 
         tracing::info!("initiating connection to Docker Engine");

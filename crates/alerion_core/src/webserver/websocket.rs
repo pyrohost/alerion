@@ -9,9 +9,8 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use smallvec::{smallvec, SmallVec};
 use uuid::Uuid;
-use alerion_datamodel as dm;
 
-use crate::servers::server::{Server, ProcState, InboundMessage, OutboundMessage, ServerChannel};
+use crate::servers::server::{Server, ProcState, InboundMessage, OutboundMessage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecvWebsocketEvent {

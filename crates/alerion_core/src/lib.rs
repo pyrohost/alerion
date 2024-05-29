@@ -6,7 +6,7 @@ use fs::config::Config;
 use futures::stream::{FuturesUnordered, StreamExt};
 
 use crate::servers::pool::ServerPool;
-use crate::fs::LocalData;
+use crate::fs::LocalDataHandle;
 
 pub fn splash() {
     println!(
@@ -38,7 +38,7 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     tracing::info!("starting alerion");
 
     let config = Config::load()?;
-    let localdata = LocalData::new(config.data_dir.clone()).await?;
+    let localdata = LocalDataHandle::new(config.data_dir.clone()).await?;
 
     let server_pool = ServerPool::new(&config, localdata.clone()).await?;
 
