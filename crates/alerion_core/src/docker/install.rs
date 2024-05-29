@@ -187,14 +187,18 @@ async fn monitor(
     server: &Arc<Server>,
     stream: &mut (dyn Stream<Item = Result<LogOutput, BollardError>> + Unpin + Send),
 ) {
+    let mut logfile = server.install_logfile().await;
+
     while let Some(result) = stream.next().await {
-        match result {
+         match result {
             Ok(output) => {
                 let bytes = output.into_bytes();
                 let sanitized = Arc::new(sanitize_output(&bytes));
 
-                let msg = OutboundMessage::install_output(sanitized);
+                let msg = OutboundMessage::install_output(Arc::clone(&sanitized));
                 server.websocket.broadcast(msg);
+
+                logfile.write(&sanitized).await;
             },
 
             Err(e) => {
@@ -202,6 +206,8 @@ async fn monitor(
             }
         }
     }
+
+    logfile.flush().await;
 }
 
 /// Sanitizes the given bytes to remove bad control characters
@@ -213,7 +219,7 @@ fn sanitize_output(bytes: &[u8]) -> String {
         .as_ref()
         .chars()
         // REPLACEMENT_CHARACTER.is_whitespace() == false
-        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .filter(|c| !c.is_control() || c.is_whitespace())
         .collect::<String>()
 }
 

@@ -1,15 +1,16 @@
 use std::sync::Arc;
 use std::time::Instant;
+use std::io;
 
 use bollard::Docker;
-use tokio::sync::{mpsc, broadcast};
+use tokio::sync::{Mutex as TokioMutex, mpsc, broadcast};
 use uuid::Uuid;
 use alerion_datamodel as dm;
-use parking_lot::Mutex;
+use parking_lot::Mutex as PlMutex;
 use serde::Serialize;
 
 use crate::servers::remote;
-use crate::fs::LocalData;
+use crate::fs::{FsLogger, LocalData, LogFileInterface};
 use crate::docker;
 
 use super::ServerError;
@@ -132,16 +133,17 @@ pub struct Server {
     pub start_time: Instant,
     pub websocket: WebsocketBucket,
     pub uuid: Uuid,
-    pub(crate) state: Mutex<State>,
-    pub(crate) proc_state: Mutex<ProcState>,
+    pub(crate) state: PlMutex<State>,
+    pub(crate) proc_state: PlMutex<ProcState>,
     remote: remote::ServerApi,
     docker: Arc<Docker>,
     localdata: LocalData,
+    logger: FsLogger,
 }
 
 impl Server {
     /// Creates a bare, uninitiated server.
-    pub fn new(uuid: Uuid, remote: remote::Api, docker: Arc<Docker>, localdata: LocalData) -> Arc<Self> {
+    pub async fn new(uuid: Uuid, remote: remote::Api, docker: Arc<Docker>, localdata: LocalData) -> Result<Arc<Self>, ServerError> {
         let (websocket, mut ws_receiver) = WebsocketBucket::new();
 
         let server = Arc::new(Server {
@@ -150,8 +152,9 @@ impl Server {
             uuid,
             remote: remote.server_api(uuid),
             docker,
-            state: Mutex::new(State::Bare),
-            proc_state: Mutex::new(ProcState::Offline),
+            state: PlMutex::new(State::Bare),
+            proc_state: PlMutex::new(ProcState::Offline),
+            logger: localdata.logger(uuid).await?,
             localdata,
         });
 
@@ -160,7 +163,7 @@ impl Server {
             }
         });
 
-        server
+        Ok(server)
     }
 
     pub fn start_installation(this: Arc<Server>) -> Result<(), ServerError> {
@@ -177,6 +180,14 @@ impl Server {
         tokio::spawn(installation_process(this));
 
         Ok(())
+    }
+
+    pub async fn install_logfile(&self) -> LogFileInterface {
+        self.logger.open_install().await
+    }
+
+    pub async fn server_logfile(&self) -> LogFileInterface {
+        self.logger.open_server().await
     }
 
     pub async fn set_installation_status(&self, success: bool) -> Result<(), ServerError> {

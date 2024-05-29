@@ -1,9 +1,11 @@
 use std::ffi::{CStr, CString};
+use std::io;
 use std::mem::zeroed;
 use std::env;
 use std::path::{PathBuf, Path};
 use std::process::Command;
 use std::ptr::null_mut;
+use std::os::unix::fs::symlink as unix_symlink;
 
 use libc::{__errno_location, getpwnam_r, gid_t, sysconf, uid_t, ERANGE, _SC_GETPW_R_SIZE_MAX};
 use thiserror::Error;
@@ -98,6 +100,10 @@ impl super::ConfigPathImpl for ConfigPath {
     fn node() -> &'static str {
         "config.json"
     }
+}
+
+pub fn symlink(original: &Path, link: &Path) -> io::Result<()> {
+    unix_symlink(original, link)
 }
 
 fn get_passwd_record(uname: &CStr) -> Result<Option<(uid_t, gid_t)>, LibcError> {

@@ -38,7 +38,7 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     tracing::info!("starting alerion");
 
     let config = Config::load()?;
-    let localdata = LocalData::new(config.data_dir.clone())?;
+    let localdata = LocalData::new(config.data_dir.clone()).await?;
 
     let server_pool = ServerPool::new(&config, localdata.clone()).await?;
 

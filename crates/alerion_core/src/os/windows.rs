@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::fs::{self, Permissions};
 use std::io;
 use std::path::Path;
+use std::os::windows::fs::symlink_file;
 
 use thiserror::Error;
 
@@ -68,4 +69,8 @@ impl super::ConfigFileImpl for ConfigFile {
         fs::write(Self::path(), contents)?;
         Ok(())
     }
+}
+
+pub fn symlink(original: &Path, link: &Path) -> io::Result<()> {
+    symlink_file(original, link)
 }

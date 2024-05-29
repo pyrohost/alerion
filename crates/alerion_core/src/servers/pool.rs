@@ -70,7 +70,7 @@ impl ServerPool {
             drop(read);
 
             let docker = Arc::clone(&self.docker);
-            let server = Server::new(uuid, self.remote_api.clone(), docker, self.localdata.clone());
+            let server = Server::new(uuid, self.remote_api.clone(), docker, self.localdata.clone()).await?;
 
             let mut writer = self.servers.write().await;
             writer.insert(uuid, Arc::clone(&server));

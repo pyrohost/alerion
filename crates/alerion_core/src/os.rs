@@ -24,6 +24,12 @@ pub type OsLibraryError = unix::LibcError;
 #[cfg(windows)]
 pub type OsLibraryError = windows::WinapiError;
 
+#[cfg(unix)]
+pub use unix::symlink;
+
+#[cfg(windows)]
+pub use windows::symlink;
+
 #[derive(Error, Debug)]
 pub enum OsError {
     #[error(transparent)]
