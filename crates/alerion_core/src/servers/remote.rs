@@ -146,6 +146,7 @@ impl ServerApi {
             .api
             .http
             .post(url)
+            .header("Content-Type", "application/json")
             .json(&req)
             .send()
             .await?;
