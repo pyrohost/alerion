@@ -13,8 +13,7 @@ use uuid::Uuid;
 use serde::Serialize;
 use tokio::io::AsyncWrite;
 
-use crate::docker::{self, DockerError, is_404};
-use super::{Inspected, Inspectable};
+use crate::docker;
 
 #[derive(Debug, Clone)]
 pub struct ContainerName {
@@ -57,71 +56,56 @@ pub struct Container {
     created_at: Option<String>,
 }
 
-impl Inspectable for Container {
-    type Model = ContainerInspectResponse;
-    type Ref = ContainerName;
-
-    async fn inspect(
-        api: &Docker,
-        args: Self::Ref,
-    ) -> docker::Result<Inspected<Self>> {    
-        let opts = InspectContainerOptions { size: false };
-
-        let result = api.inspect_container(&args.full_name(), Some(opts)).await;
-
-        let response = match result {
-            Err(e) if is_404(&e) => {
-                return Ok(Inspected::None);
-            }
-
-            Err(e) => {
-                return Err(e.into());
-            }
-
-            Ok(r) => r,
-        };
-
-        let Some(id) = response.id else {
-            tracing::error!("missing container id from Docker Engine response");
-            return Err(DockerError::BadResponse);
-        };
-
-        // this is to avoid a partial move of `response`
-        let version = {
-            match response.config {
-                Some(ref c) => match c.labels {
-                    Some(ref l) => l.get(docker::ALERION_VERSION_LABEL).cloned(),
-                    None => None,
-                },
-                None => None,
-            }
-        };
-
-        let current_version = env!("CARGO_PKG_VERSION");
-
-        Ok(match version {
-            Some(v) => {
-                if v != current_version {
-                    tracing::warn!(
-                        "mismatched container version (found {v}, currently on {current_version})"
-                    );
-                }
-
-                Inspected::Some(Container {
-                    id,
-                    created_at: response.created,
-                })
-            }
-
-            None => Inspected::Invalid(Box::new(ContainerInspectResponse {
-                id: Some(id),
-                ..response
-            })),
-        })
-    }
+async fn inspect_container(api: &Docker, name_or_id: &str) -> Result<ContainerInspectResponse, BollardError> {
+    let opts = InspectContainerOptions { size: false };
+    api.inspect_container(name_or_id, Some(opts)).await
 }
 
 impl Container {
+    pub async fn recreate<Z>(
+        api: &Docker,
+        name: ContainerName,
+        config: Config<Z>,
+    ) -> docker::Result<Self>
+    where
+        Z: Into<String> + Eq + Hash + Serialize,
+    {
+        let result = inspect_container(api, &name.full_name()).await;
+
+        match result {
+            Err(e) if docker::is_404(&e) => {
+                // container doesn't exist! just create it
+                tracing::debug!("creating container");
+                Container::create(api, name, config).await
+            }
+
+            Ok(response) => {    
+                let version = response.config
+                    .as_ref()
+                    .and_then(|c| c.labels.as_ref())
+                    .and_then(|l| l.get(docker::ALERION_VERSION_LABEL).cloned());
+
+                let current = env!("CARGO_PKG_VERSION");
+                if version.as_deref() != Some(current) {
+                    tracing::warn!(
+                        "mismatched container version (found {}, currently on {})",
+                        version.as_deref().unwrap_or("none"),
+                        current,
+                    );
+                }
+
+                tracing::debug!("container already exists, deleting it and creating it again");
+                force_remove_by_name_or_id(api, &name.full_name()).await?;
+
+                Container::create(api, name, config).await
+            },
+
+            Err(e) => {
+                Err(e.into())
+            }
+        }
+    }
+
     pub async fn create<Z>(
         api: &Docker,
         name: ContainerName,

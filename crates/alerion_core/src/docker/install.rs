@@ -15,7 +15,7 @@ use crate::docker::models::bind_mount::BindMountName;
 use crate::servers::server::{Server, State, OutboundMessage};
 use crate::docker::{
     self,
-    models::{container, Inspectable, Inspected, BindMount, Container, ContainerName},
+    models::{container, BindMount, Container, ContainerName},
 };
 
 const INSTALLER_SCRIPT_NAME: &str = "installer.sh";
@@ -70,37 +70,10 @@ pub async fn engage(
     let install_container = {
         let name = ContainerName::new_install(uuid);
 
-        match Container::inspect(api, name.clone()).await? {
-            Inspected::Some(cont) => {
-                tracing::warn!("the installation container already exists and was created by alerion");
-                tracing::warn!("creation time: {}", cont.created_at().unwrap_or("unknown"));
-                tracing::warn!("this could either mean alerion crashed, or the installation failed");
-                tracing::warn!("the container will be deleted and the installation process will restart");
-
-                cont.force_remove(api).await?;
-            }
-
-            Inspected::Invalid(resp) => {
-                tracing::warn!("the installation container already exists, but wasn't created by alerion");
-                tracing::warn!("this could be an artifact from wings");
-                tracing::warn!("the container will be deleted and the installation process will start");
-
-                tracing::debug!("Docker response body: {resp:#?}");
-
-                container::force_remove_by_name_or_id(api, &name.full_name()).await?;
-            }
-
-            Inspected::None => {
-                tracing::debug!("installation container not found: OK");
-            }
-        }
-
         let volumes = vec![
             install_mount.to_docker_mount("/mnt/install".to_owned()),
             server_mount.to_docker_mount("/mnt/server".to_owned()),
         ];
-
-        tracing::info!("creating installation container");
 
         let config = docker_install_container_config(
             &name,
@@ -112,7 +85,7 @@ pub async fn engage(
 
         tracing::debug!("{config:#?}");
 
-        let cont_fut = Container::create(api, name, config);
+        let cont_fut = Container::recreate(api, name, config);
         crate::ensure!(cont_fut.await, "failed to create installation container")
     };
 
