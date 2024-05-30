@@ -74,7 +74,6 @@ impl Container {
 
         match result {
             Err(e) if docker::is_404(&e) => {
-                // container doesn't exist! just create it
                 tracing::debug!("creating container");
                 Container::create(api, name, config).await
             }
@@ -101,6 +100,7 @@ impl Container {
             },
 
             Err(e) => {
+                tracing::error!("failed to inspect container: {e}");
                 Err(e.into())
             }
         }

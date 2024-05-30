@@ -15,7 +15,7 @@ use crate::docker::models::bind_mount::BindMountName;
 use crate::servers::server::{Server, State, OutboundMessage};
 use crate::docker::{
     self,
-    models::{container, BindMount, Container, ContainerName},
+    models::{BindMount, Container, ContainerName},
 };
 
 const INSTALLER_SCRIPT_NAME: &str = "installer.sh";
@@ -85,8 +85,7 @@ pub async fn engage(
 
         tracing::debug!("{config:#?}");
 
-        let cont_fut = Container::recreate(api, name, config);
-        crate::ensure!(cont_fut.await, "failed to create installation container")
+        Container::recreate(api, name, config).await?
     };
 
     // put the installation script in the install volume

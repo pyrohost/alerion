@@ -65,20 +65,6 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[macro_export]
-macro_rules! ensure {
-    ($value:expr, $fmt:expr $(, $arg:expr)* $(,)?) => {
-        match $value {
-            ::std::result::Result::Ok(ok_value) => ok_value,
-            ::std::result::Result::Err(error_value) => {
-                ::tracing::error!("{}: {error_value}", format!($fmt $(, $arg)*));
-                return ::std::result::Result::Err(std::convert::Into::into(error_value));
-            }
-        }
-
-    }
-}
-
 pub mod fs;
 pub mod os;
 pub mod servers;
