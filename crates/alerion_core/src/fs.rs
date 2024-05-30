@@ -1,10 +1,14 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::io;
 use std::fmt;
+use std::sync::Arc;
+use std::ops::{DerefMut, Deref};
 
 use uuid::Uuid;
 use futures::stream::{StreamExt, FuturesUnordered};
 use chrono::offset::Local;
+use serde::{Serialize, Deserialize};
 use tokio::fs;
 use tokio::io::{AsyncWriteExt, BufWriter};
 
@@ -13,10 +17,12 @@ use crate::os;
 const MOUNTS: &str = "mounts";
 const BACKUPS: &str = "backups";
 const LOGS: &str = "logs";
+const DB_FILE: &str = "db.json";
 
 #[derive(Debug, Clone)]
 pub struct LocalDataHandle {
     path: PathBuf,
+    database: db::Handle,
 }
 
 impl LocalDataHandle {
@@ -28,12 +34,17 @@ impl LocalDataHandle {
         )?;
 
         Ok(LocalDataHandle {
-            path
+            database: db::Handle::new(path.join(DB_FILE)),
+            path,
         })
     }
 
     pub fn mounts(&self) -> Mounts {
         Mounts { path: self.path.join(MOUNTS) }
+    }
+
+    pub fn db(&self) -> db::Handle {
+        self.database.clone()
     }
 
     pub async fn logger(&self, uuid: Uuid) -> io::Result<FsLogger> {
@@ -52,6 +63,7 @@ impl LocalDataHandle {
         })
     }
 }
+
 
 pub struct FsLogger {
     install: PathBuf,
@@ -257,3 +269,4 @@ pub use config::Config;
 #[cfg(feature = "wings_compat")]
 mod wings_compat;
 pub mod config;
+pub mod db;
