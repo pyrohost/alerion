@@ -12,7 +12,7 @@ use bollard::models;
 
 use alerion_datamodel::remote::server::{GetServerByUuidResponse, GetServerInstallByUuidResponse};
 use crate::docker::models::bind_mount::BindMountName;
-use crate::servers::{OutboundMessage, Server, State};
+use crate::servers::{self, OutboundMessage, Server, State};
 use crate::docker::{
     self,
     models::{BindMount, Container, ContainerName},
@@ -31,36 +31,18 @@ const MIB_TO_BYTES: i64 = 1000 * 1000;
 /// If this is a reinstall, delete the involved containers and volumes beforehand
 /// to avoid warnings being emitted.  
 #[tracing::instrument(skip_all, name = "installation")]
-pub async fn engage(server: Arc<Server>) {
-    let server_cfg = match server.remote.get_server_configuration().await {
-        Ok(s) => {
-            tracing::debug!("got remote server configuration");
-            s
-        }
+pub async fn engage(server: Arc<Server>) -> servers::Result<()> {
+    let server_cfg = server.remote.get_server_configuration().await?;
 
-        Err(e) => {
-            tracing::error!("failed to get remote server configuration: {e}");
-            return;
-        }
-    };
-
-    let install_cfg = match server.remote.get_install_instructions().await {
-        Ok(s) => {
-            tracing::debug!("got remote server installation configuration");
-            s
-        }
-
-        Err(e) => {
-            tracing::error!("failed to get remote server installation configuration: {e}");
-            return;
-        }
-    };
+    let install_cfg = server.remote.get_install_instructions().await?;
 
     server.fs.db
         .update(|m| m.state = State::Installing).await;
 
     let success = installation_core(Arc::clone(&server), server_cfg, install_cfg).await;
     Server::mark_install_status(server, success).await;
+
+    Ok(())
 }
 
 async fn installation_core(server: Arc<Server>, server_cfg: GetServerByUuidResponse, install_cfg: GetServerInstallByUuidResponse) -> bool { 
