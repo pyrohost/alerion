@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
-use config::AlerionConfig;
+use fs::config::Config;
 use futures::stream::{FuturesUnordered, StreamExt};
 
-use crate::filesystem::setup_directories;
-use crate::servers::ServerPool;
+use crate::servers::pool::ServerPool;
+use crate::fs::LocalDataPaths;
 
 pub fn splash() {
     println!(
@@ -26,7 +26,8 @@ the terms of the PSAL. If you don't agree to the terms of
 the PSAL, you are not permitted to use this software. 
 
 License: https://github.com/pyrohost/legal/blob/main/licenses/PSAL.md
-Source code: https://github.com/pyrohost/alerion"
+Source code: https://github.com/pyrohost/alerion
+"
     );
 }
 
@@ -34,18 +35,23 @@ Source code: https://github.com/pyrohost/alerion"
 pub async fn alerion_main() -> anyhow::Result<()> {
     splash();
 
-    tracing::info!("Starting Alerion");
+    tracing::info!("starting alerion");
 
-    let project_dirs = setup_directories().await?;
-    let config = AlerionConfig::load(&project_dirs)?;
+    let config = Config::load()?;
 
-    let server_pool = Arc::new(ServerPool::new(&config).await?);
+    tracing::debug!("loading data paths");
+    let localdata = LocalDataPaths::new(config.data_dir.clone()).await?;
 
-    //server_pool.create_server("0e4059ca-d79b-46a5-8ec4-95bd0736d150".try_into().unwrap()).await;
+    tracing::debug!("loading server pool");
+    let server_pool = ServerPool::new(&config, localdata).await?;
 
+    tracing::debug!("fetching existing servers");
+    ServerPool::try_fetch_existing(&server_pool).await;
+
+    tracing::debug!("spawning webserver task");
     let webserver_handle = tokio::spawn(async move {
         let cfg = config.clone();
-        let result = webserver::serve(&cfg, Arc::clone(&server_pool)).await;
+        let result = webserver::serve(cfg, Arc::clone(&server_pool)).await;
 
         match result {
             Ok(()) => tracing::info!("webserver exited gracefully"),
@@ -66,8 +72,8 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub mod config;
-pub mod filesystem;
+pub mod fs;
+pub mod os;
 pub mod servers;
 pub mod webserver;
-pub mod websocket;
+pub mod docker;

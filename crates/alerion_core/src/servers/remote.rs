@@ -8,7 +8,7 @@ use reqwest::StatusCode;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::config::AlerionConfig;
+use crate::fs::Config;
 
 #[derive(Debug, Error)]
 pub enum ResponseError {
@@ -24,14 +24,17 @@ pub enum ResponseError {
     Unknown(StatusCode),
 }
 
-/// A wrapper around the simple pyrodactyl remote API
-pub struct RemoteClient {
+/// A wrapper around the pyrodactyl remote API.  
+///
+/// Do **not** wrap it in an `Arc` or `Rc`, just clone it.
+#[derive(Clone, Debug)]
+pub struct Api {
     remote: String,
     http: reqwest::Client,
 }
 
-impl RemoteClient {
-    pub fn new(config: &AlerionConfig) -> Result<Self, ResponseError> {
+impl Api {
+    pub fn new(config: &Config) -> Result<Self, ResponseError> {
         let token_id = &config.auth.token_id;
         let token = &config.auth.token;
 
@@ -58,95 +61,6 @@ impl RemoteClient {
         })
     }
 
-    pub async fn post_installation_status(
-        &self,
-        uuid: Uuid,
-        successful: bool,
-        reinstall: bool,
-    ) -> Result<(), ResponseError> {
-        let req = PostServerInstallByUuidRequest {
-            successful,
-            reinstall,
-        };
-
-        let url = format!(
-            "{}/api/remote/servers/{}/install",
-            self.remote,
-            uuid.as_hyphenated()
-        );
-
-        tracing::debug!("remote: POST {url}");
-
-        let resp = self
-            .http
-            .post(url)
-            .body(serde_json::to_string(&req).expect("JSON serialization should not fail"))
-            .send()
-            .await?;
-
-        if resp.status() == StatusCode::NOT_FOUND {
-            Err(ResponseError::NotFound(uuid))
-        } else {
-            Ok(())
-        }
-    }
-
-    pub async fn get_install_instructions(
-        &self,
-        uuid: Uuid,
-    ) -> Result<GetServerInstallByUuidResponse, ResponseError> {
-        let url = format!(
-            "{}/api/remote/servers/{}/install",
-            self.remote,
-            uuid.as_hyphenated()
-        );
-
-        tracing::debug!("remote: GET {url}");
-
-        let resp = self.http.get(url).send().await?;
-
-        match resp.status() {
-            StatusCode::NOT_FOUND => Err(ResponseError::NotFound(uuid)),
-            StatusCode::UNAUTHORIZED => Err(ResponseError::Unauthorized),
-            StatusCode::OK => {
-                let bytes = resp.bytes().await?;
-
-                serde_json::from_slice::<GetServerInstallByUuidResponse>(&bytes)
-                    .map_err(ResponseError::InvalidJson)
-            }
-
-            _ => Err(ResponseError::Unknown(resp.status())),
-        }
-    }
-
-    pub async fn get_server_configuration(
-        &self,
-        uuid: Uuid,
-    ) -> Result<GetServerByUuidResponse, ResponseError> {
-        let url = format!(
-            "{}/api/remote/servers/{}",
-            self.remote,
-            uuid.as_hyphenated()
-        );
-
-        tracing::debug!("remote: GET {url}");
-
-        let resp = self.http.get(url).send().await?;
-
-        match resp.status() {
-            StatusCode::NOT_FOUND => Err(ResponseError::NotFound(uuid)),
-            StatusCode::UNAUTHORIZED => Err(ResponseError::Unauthorized),
-            StatusCode::OK => {
-                let bytes = resp.bytes().await?;
-
-                serde_json::from_slice::<GetServerByUuidResponse>(&bytes)
-                    .map_err(ResponseError::InvalidJson)
-            }
-
-            _ => Err(ResponseError::Unknown(resp.status())),
-        }
-    }
-
     pub async fn get_servers(&self) -> Result<Vec<ServerData>, ResponseError> {
         let mut servers: Option<Vec<ServerData>> = None;
         let mut page = 1;
@@ -154,7 +68,7 @@ impl RemoteClient {
         loop {
             let url = format!(
                 "{}/api/remote/servers?page={}&per_page=2",
-                self.remote, page
+                self.remote, page,
             );
 
             tracing::debug!("remote: GET {url}");
@@ -172,7 +86,6 @@ impl RemoteClient {
 
                 _ => {
                     let status = resp.status();
-                    //log::debug!("{}", resp.text().await.unwrap());
                     Err(ResponseError::Unknown(status))
                 }
             };
@@ -194,6 +107,106 @@ impl RemoteClient {
             }
 
             page += 1;
+        }
+    }
+
+    pub fn server_api(&self, uuid: Uuid) -> ServerApi {
+        ServerApi {
+            uuid,
+            api: self.clone(),
+        }
+    }
+}
+
+pub struct ServerApi {
+    uuid: Uuid,
+    api: Api,
+}
+
+impl ServerApi {
+    pub async fn post_installation_status(
+        &self,
+        successful: bool,
+        reinstall: bool,
+    ) -> Result<(), ResponseError> {
+        let req = PostServerInstallByUuidRequest {
+            successful,
+            reinstall,
+        };
+
+        let url = format!(
+            "{}/api/remote/servers/{}/install",
+            self.api.remote,
+            self.uuid.as_hyphenated(),
+        );
+
+        tracing::debug!("remote: POST {url}");
+
+        let resp = self
+            .api
+            .http
+            .post(url)
+            .header("Content-Type", "application/json")
+            .json(&req)
+            .send()
+            .await?;
+
+        if resp.status() == StatusCode::NOT_FOUND {
+            Err(ResponseError::NotFound(self.uuid))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn get_install_instructions(
+        &self,
+    ) -> Result<GetServerInstallByUuidResponse, ResponseError> {
+        let url = format!(
+            "{}/api/remote/servers/{}/install",
+            self.api.remote,
+            self.uuid.as_hyphenated()
+        );
+
+        tracing::debug!("remote: GET {url}");
+
+        let resp = self.api.http.get(url).send().await?;
+
+        match resp.status() {
+            StatusCode::NOT_FOUND => Err(ResponseError::NotFound(self.uuid)),
+            StatusCode::UNAUTHORIZED => Err(ResponseError::Unauthorized),
+            StatusCode::OK => {
+                let bytes = resp.bytes().await?;
+
+                serde_json::from_slice::<GetServerInstallByUuidResponse>(&bytes)
+                    .map_err(ResponseError::InvalidJson)
+            }
+
+            _ => Err(ResponseError::Unknown(resp.status())),
+        }
+    }
+
+    pub async fn get_server_configuration(&self) -> Result<GetServerByUuidResponse, ResponseError> {
+        let url = format!(
+            "{}/api/remote/servers/{}",
+            self.api.remote,
+            self.uuid.as_hyphenated()
+        );
+
+        tracing::debug!("remote: GET {url}");
+
+        let resp = self.api.http.get(url).send().await?;
+
+        match resp.status() {
+            StatusCode::NOT_FOUND => Err(ResponseError::NotFound(self.uuid)),
+            StatusCode::UNAUTHORIZED => Err(ResponseError::Unauthorized),
+            StatusCode::OK => {
+                let bytes = resp.bytes().await?;
+
+                serde_json::from_slice::<GetServerByUuidResponse>(&bytes)
+                    .map_err(ResponseError::InvalidJson)
+            }
+
+            _ => Err(ResponseError::Unknown(resp.status())),
         }
     }
 }

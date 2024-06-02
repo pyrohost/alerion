@@ -4,18 +4,18 @@ use std::sync::Arc;
 
 use alerion_datamodel::webserver::CreateServerRequest;
 use poem::listener::TcpListener;
-use poem::middleware::{Tracing, Cors};
+use poem::middleware::Cors;
 use poem::web::websocket::WebSocket;
 use poem::web::{Data, Json, Path};
-use poem::{endpoint, get, handler, post, Body, EndpointExt, IntoResponse, Route, Server};
+use poem::{endpoint, get, handler, post, EndpointExt, IntoResponse, Route, Server};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use uuid::Uuid;
 
 use self::middleware::bearer_auth::BearerAuthMiddleware;
-use crate::config::AlerionConfig;
-use crate::servers::ServerPool;
+use crate::fs::Config;
+use crate::servers::pool::ServerPool;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SystemResponseV1 {
@@ -46,36 +46,47 @@ async fn get_system_info() -> impl IntoResponse {
 async fn initialize_websocket(
     Path(uuid): Path<Uuid>,
     Data(server_pool): Data<&Arc<ServerPool>>,
+    Data(config): Data<&Config>,
     ws: WebSocket,
 ) -> impl IntoResponse {
-    if let Some(server) = server_pool.get_server(uuid).await {
-        let recv = server.add_websocket_connection().await;
+    if let Some(server) = server_pool.get(uuid).await {
+        let auth = websocket::auth::Auth::from_config(config);
 
-        ws.on_upgrade(move |mut socket| websocket::websocket_handler(socket, recv, uuid))
-            .into_response()
+        let resp = ws.on_upgrade(move |mut socket| {
+            tracing::info!("upgraded websocket");
+            websocket::websocket_handler(server, socket, uuid, auth)
+        });
+
+        resp.into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
     }
 }
 
 #[handler]
-async fn create_server(Json(options): Json<CreateServerRequest>, Data(server_pool): Data<&Arc<ServerPool>>) -> impl IntoResponse {
-    let server = match server_pool.get_server(options.uuid).await {
+async fn create_server(
+    Json(options): Json<CreateServerRequest>,
+    Data(server_pool): Data<&Arc<ServerPool>>,
+) -> impl IntoResponse {
+    let _server = match server_pool.get(options.uuid).await {
         Some(s) => s,
         None => {
-            let server_fut = server_pool.register_server(options.uuid, options.start_on_completion);
-            let Ok(server) = server_fut.await else {
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            };
+            let server_fut = server_pool.create(options.uuid, options.start_on_completion);
 
-            server
+            match server_fut.await {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::error!("error occured when creating a server: {e}");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
         }
     };
 
     ().into_response()
 }
 
-pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::Result<()> {
+pub async fn serve(config: Config, server_pool: Arc<ServerPool>) -> io::Result<()> {
     // TODO: restrict origins
     let cors = Cors::new().allow_credentials(true);
 
@@ -85,8 +96,10 @@ pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::
 
     let ws_endpoint = get(initialize_websocket);
 
-    let install_endpoint = post(create_server)
-        .with(BearerAuthMiddleware::new(config.auth.token.clone()));
+    let install_endpoint =
+        post(create_server).with(BearerAuthMiddleware::new(config.auth.token.clone()));
+
+    let bound = (config.api.host, config.api.port);
 
     let api = Route::new()
         .nest(
@@ -97,10 +110,11 @@ pub async fn serve(config: &AlerionConfig, server_pool: Arc<ServerPool>) -> io::
                 .at("servers/:uuid/ws", ws_endpoint),
         )
         .with(cors)
-        .with(Tracing::default())
+        .with(middleware::tracing::Tracing)
+        .data(config)
         .data(server_pool);
 
-    Server::new(TcpListener::bind((config.api.host, config.api.port)))
+    Server::new(TcpListener::bind(bound))
         .run(api)
         .await
 }

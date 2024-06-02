@@ -2,7 +2,19 @@ use bytestring::ByteString;
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
-#[derive(Copy, Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum StateUpdate {
+    #[serde(rename = "start")]
+    Start,
+    #[serde(rename = "stop")]
+    Stop,
+    #[serde(rename = "restart")]
+    Restart,
+    #[serde(rename = "kill")]
+    Kill,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 pub enum ServerStatus {
     #[serde(rename = "running")]
     Running,
@@ -12,6 +24,19 @@ pub enum ServerStatus {
     Stopping,
     #[serde(rename = "offline")]
     Offline,
+}
+
+impl ServerStatus {
+    /// Use this over `serde_json::to_string`. This provides
+    /// static strings slices which is more optimizer friendly.
+    pub fn to_str(self) -> &'static str {
+        match self {
+            ServerStatus::Running => "running",
+            ServerStatus::Starting => "starting",
+            ServerStatus::Stopping => "stopping",
+            ServerStatus::Offline => "offline",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

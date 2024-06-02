@@ -83,9 +83,9 @@ pub struct ContainerConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct BuildConfig {
-    pub memory_limit: isize,
-    pub swap: isize,
-    pub io_weight: u32,
+    pub memory_limit: i64,
+    pub swap: i64,
+    pub io_weight: u16,
     pub cpu_limit: u32,
     pub threads: Option<String>,
     pub disk_space: usize,
