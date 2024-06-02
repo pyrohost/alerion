@@ -12,7 +12,7 @@ use bollard::models;
 
 use alerion_datamodel::remote::server::{GetServerByUuidResponse, GetServerInstallByUuidResponse};
 use crate::docker::models::bind_mount::BindMountName;
-use crate::servers::{self, OutboundMessage, Server, State};
+use crate::servers::{OutboundMessage, Server, State};
 use crate::docker::{
     self,
     models::{BindMount, Container, ContainerName},
@@ -30,40 +30,82 @@ const MIB_TO_BYTES: i64 = 1000 * 1000;
 ///
 /// If this is a reinstall, delete the involved containers and volumes beforehand
 /// to avoid warnings being emitted.  
-pub async fn engage(
-    server: Arc<Server>,
-) -> servers::Result<()> {
-    let uuid = server.uuid;
-    let api = &server.docker;
+#[tracing::instrument(skip_all, name = "installation")]
+pub async fn engage(server: Arc<Server>) {
+    let server_cfg = match server.remote.get_server_configuration().await {
+        Ok(s) => {
+            tracing::debug!("got remote server configuration");
+            s
+        }
+
+        Err(e) => {
+            tracing::error!("failed to get remote server configuration: {e}");
+            return;
+        }
+    };
+
+    let install_cfg = match server.remote.get_install_instructions().await {
+        Ok(s) => {
+            tracing::debug!("got remote server installation configuration");
+            s
+        }
+
+        Err(e) => {
+            tracing::error!("failed to get remote server installation configuration: {e}");
+            return;
+        }
+    };
 
     server.fs.db
         .update(|m| m.state = State::Installing).await;
 
-    let server_cfg = server.remote.get_server_configuration().await?;
-    let install_cfg = server.remote.get_install_instructions().await?;
+    let success = installation_core(Arc::clone(&server), server_cfg, install_cfg).await;
+    Server::mark_install_status(server, success).await;
+}
 
-    let mounts = &server.fs.mounts;
+async fn installation_core(server: Arc<Server>, server_cfg: GetServerByUuidResponse, install_cfg: GetServerInstallByUuidResponse) -> bool { 
+    let mounts = &server.fs.mounts; 
+    let uuid = server.uuid;
+    let api = &server.docker;
 
-    // 1. Installation mount
     let install_mount = {
-        tracing::debug!("creating installer bind mount");
         let name = BindMountName::new_installer(uuid);
-        BindMount::new_clean(mounts, name).await?
+
+        match BindMount::new_clean(mounts, name).await {
+            Ok(b) => {
+                tracing::debug!("recreated installation bind mount");
+                b
+            }
+
+            Err(e) => {
+                tracing::error!("failed to create installation bind mount: {e}");
+                return false;
+            }
+        }
     };
 
-    // 2. Create the server's bind mount.
+    // create the server's bind mount.
     //
     // Make sure it's empty; at this point, its contents should be backed up/ready to be lost.
     // This uses a bind mount because we need the flexibility that those provide (support
     // being modified by the host.)
     let server_mount = {
-        tracing::debug!("creating server bind mount");
         let name = BindMountName::new_server(uuid);
-        BindMount::new_clean(mounts, name).await?
+
+        match BindMount::new_clean(mounts, name).await {
+            Ok(b) => {
+                tracing::debug!("recreated server bind mount");
+                b
+            }
+
+            Err(e) => {
+                tracing::error!("failed to create server bind mount: {e}");
+                return false;
+            }
+        }
     };
 
-
-    // 3. Create the container for the installation process
+    // create the container for the installation process
     let GetServerInstallByUuidResponse {
         container_image,
         entrypoint,
@@ -86,87 +128,77 @@ pub async fn engage(
             volumes,
         );
 
-        tracing::debug!("{config:#?}");
+        match Container::force_create(api, name, config).await {
+            Ok(c) => {
+                tracing::debug!("installation container created");
+                c
+            }
 
-        Container::recreate(api, name, config).await?
+            Err(e) => {
+                tracing::error!("failed to create installation container: {e}");
+                return false;
+            }
+        }
     };
 
     // put the installation script in the install volume
     let script_normalized = normalize_script(&script);
-    if let Err(e) = installer_script(install_mount.path(), &script_normalized).await {
+    if let Err(e) = write_installer_script(install_mount.path(), &script_normalized).await {
         tracing::error!("failed to write installation script to container mountpoint: {e}");
-        return Err(e.into());
+        return false;
     }
 
     if let Err(e) = install_container.start(api).await {
         tracing::error!("container failed to start: {e:?}");
-        return Err(e.into());
+        return false;
     }
 
     // spawn a monitoring task
-    {
-        // move `Arc<Server>` here
-        let api = api.clone();
-        tokio::spawn(async move {
-            let result = install_container.attach(&api, false).await; 
+    let result = install_container.attach(&api, false).await; 
 
-            let (_input, mut output) = match result {
-                Ok(tuple) => tuple,
-                Err(e) => {
-                    tracing::error!("failed to attach to container: {e}");
-                    return;
+    let (_input, mut output) = match result {
+        Ok(tuple) => tuple,
+        Err(e) => {
+            tracing::error!("failed to attach to container: {e}");
+            return false;
+        }
+    };
+
+    monitor(&server, &mut output).await;
+
+    let mut success = true;
+
+    match install_container.inspect_existing(&api).await {
+        Ok(resp) => {
+            if let Some(code) = resp.state.and_then(|s| s.exit_code) {
+                if code == 0 {
+                    tracing::info!("server installed successfully");
+                } else {
+                    tracing::error!("failed to install server (exit={code})");
+                    success = false;
                 }
-            };
-
-            monitor(&server, &mut output).await;
-
-            let mut success = true;
-
-            match install_container.inspect_existing(&api).await {
-                Ok(resp) => {
-                    if let Some(code) = resp.state.and_then(|s| s.exit_code) {
-                        if code == 0 {
-                            tracing::info!("server installed successfully");
-                        } else {
-                            tracing::error!("failed to install server (exit={code})");
-                            success = false;
-                        }
-                    } else {
-                        tracing::error!("cannot get exit code of the installer");
-                        tracing::error!("assuming success");
-                    }
-                }
-
-                Err(e) => {
-                    tracing::error!("failed to inspect docker container after installation: {e}");
-                    tracing::error!("assuming success");
-                }
+            } else {
+                tracing::error!("cannot get exit code of the installer");
+                tracing::error!("assuming success");
             }
+        }
 
-            let server_install_status = Arc::clone(&server);
-            let fut_online_status = async move {
-                match server_install_status.remote.post_installation_status(success, false).await {
-                    Ok(()) => tracing::debug!("notified remote API of installation status"),
-                    Err(e) => tracing::error!("couldn't notify the panel about the installation status: {e}"),
-                }
-            };
-
-            let fut_db_update = async {
-                server.fs.db.update(|s| {
-                    s.state = State::from_installation_success(success);
-                }).await;
-            };
-
-            tokio::join!(fut_online_status, fut_db_update);
-        });
+        Err(e) => {
+            tracing::error!("failed to inspect docker container after installation: {e}");
+            tracing::error!("assuming failure");
+            success = false;
+        }
     }
 
-    tracing::info!("server installation process successfully engaged");
+    match install_container.force_remove(&api).await {
+        Ok(()) => tracing::debug!("deleted installation container"),
+        Err(e) => tracing::error!("failed to delete installation container: {e}"),
+    }
 
-    Ok(())
+    return success;
 }
 
-#[tracing::instrument(skip_all, name = "monitor_installer")]
+
 async fn monitor(
     server: &Arc<Server>,
     stream: &mut (dyn Stream<Item = Result<LogOutput, BollardError>> + Unpin + Send),
@@ -202,12 +234,14 @@ fn sanitize_output(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes)
         .as_ref()
         .chars()
-        // REPLACEMENT_CHARACTER.is_whitespace() == false
-        .filter(|c| !c.is_control() || c.is_whitespace())
+        // filter if
+        //   - is a replacement char
+        //   - is a non-whitespace control
+        .filter(|c| c != &char::REPLACEMENT_CHARACTER && (!c.is_control() || c.is_whitespace()))
         .collect::<String>()
 }
 
-async fn installer_script(mount_path: &Path, contents: &str) -> io::Result<()> {
+async fn write_installer_script(mount_path: &Path, contents: &str) -> io::Result<()> {
     let path = mount_path.join(INSTALLER_SCRIPT_NAME);
     tracing::debug!("writing installer at '{}'", path.display());
 
@@ -312,13 +346,12 @@ fn docker_install_container_config(
 
 fn normalize_script(script: &str) -> String {
     // replace ALL carriage returns, not just those prefixed with newlines
+    // ash doesn't like carriage returns
     script.replace('\r', "\n")
 }
 
 fn format_environment_for_docker(env: &HashMap<String, serde_json::Value>) -> Vec<String> {
     env.iter().map(|(k, v)| {
-        // now we hope the env variables won't create security issues!
-        // TODO
         let value = v.as_str()
             .map(Cow::Borrowed)
             .unwrap_or_else(|| Cow::Owned(format!("{v}")));

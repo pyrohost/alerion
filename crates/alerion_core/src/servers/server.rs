@@ -191,13 +191,34 @@ impl Server {
     pub async fn install_if_appropriate(this: &Arc<Server>) -> Result<(), ServerError> {
         // Server must not be active
         if !this.get_state().is_bare() {
-            tracing::error!("tried to begin installation process, but server is already active");
             return Err(ServerError::Conflict);
         }
 
         tokio::spawn(docker::install::engage(Arc::clone(this)));
 
         Ok(())
+    }
+
+    pub async fn mark_install_status(this: Arc<Server>, success: bool) {
+        let server_online = Arc::clone(&this);
+        let server_localdb = this;
+        
+        let fut_online_status = async move {
+            match server_online.remote.post_installation_status(success, false).await {
+                Ok(()) => tracing::debug!("notified remote API of installation status"),
+                Err(e) => tracing::error!("couldn't notify the panel about the installation status: {e}"),
+            }
+        };
+
+        let fut_db_update = async {
+            // logging handled within DB
+            let state = State::from_installation_success(success);
+            server_localdb.fs.db.update(|s| {
+                s.state = state;
+            }).await;
+        };
+
+        tokio::join!(fut_online_status, fut_db_update);
     }
 
     pub fn get_state(&self) -> State {

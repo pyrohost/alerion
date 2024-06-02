@@ -21,12 +21,6 @@ pub struct ContainerName {
     purpose: &'static str,
 }
 
-impl fmt::Display for ContainerName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.full_name())
-    }
-}
-
 impl ContainerName {
     pub fn new_install(uuid: Uuid) -> Self {
         Self {
@@ -51,6 +45,12 @@ impl ContainerName {
     }
 }
 
+impl fmt::Display for ContainerName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}_{}", self.uuid, self.purpose)
+    }
+}
+
 pub struct Container {
     id: String,
     created_at: Option<String>,
@@ -62,7 +62,8 @@ async fn inspect_container(api: &Docker, name_or_id: &str) -> Result<ContainerIn
 }
 
 impl Container {
-    pub async fn recreate<Z>(
+    #[tracing::instrument(skip_all, name = "container")]
+    pub async fn force_create<Z>(
         api: &Docker,
         name: ContainerName,
         config: Config<Z>,
@@ -124,7 +125,7 @@ impl Container {
         let warnings = &response.warnings;
         if !warnings.is_empty() {
             tracing::warn!(
-                "Docker emitted the following warnings after creating container {name:?}:"
+                "Docker emitted the following warnings after creating container {name}:"
             );
 
             for w in warnings {
@@ -177,7 +178,6 @@ impl Container {
         Ok(resp)
     }
 
-    /// Uses [`force_remove_by_name_or_id`].
     pub async fn force_remove(&self, api: &Docker) -> docker::Result<()> {
         force_remove_by_name_or_id(api, &self.id).await
     }
