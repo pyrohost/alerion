@@ -73,7 +73,6 @@ impl ServerPool {
 
             Ok(server)
         } else {
-            tracing::error!("server {uuid} already exists");
             Err(ServerError::Conflict)
         }
     }

@@ -38,5 +38,12 @@ fn is_404(err: &bollard::errors::Error) -> bool {
     )
 }
 
+pub use models::{
+    container::{ContainerName, Container},
+    bind_mount::{BindMount, BindMountName},
+};
+
 pub mod models;
 pub mod install;
+pub mod run;
+mod util;

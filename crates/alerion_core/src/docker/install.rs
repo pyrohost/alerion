@@ -1,7 +1,5 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::io;
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use bollard::container::LogOutput;
@@ -11,16 +9,12 @@ use tokio::fs;
 use bollard::models;
 
 use alerion_datamodel::remote::server::{GetServerByUuidResponse, GetServerInstallByUuidResponse};
-use crate::docker::models::bind_mount::BindMountName;
+use crate::docker::{util, BindMountName};
 use crate::servers::{self, OutboundMessage, Server, State};
-use crate::docker::{
-    self,
-    models::{BindMount, Container, ContainerName},
-};
+use crate::docker::{self, BindMount, Container, ContainerName};
 
 const INSTALLER_SCRIPT_NAME: &str = "installer.sh";
 // please ew
-const MIB_TO_BYTES: i64 = 1000 * 1000;
 
 /// Initiates the installation of a server.  
 ///
@@ -31,9 +25,8 @@ const MIB_TO_BYTES: i64 = 1000 * 1000;
 /// If this is a reinstall, delete the involved containers and volumes beforehand
 /// to avoid warnings being emitted.  
 #[tracing::instrument(skip_all, name = "installation")]
-pub async fn engage(server: Arc<Server>) -> servers::Result<()> {
+pub async fn engage(server: Arc<Server>) -> servers::Result<bool> {
     let server_cfg = server.remote.get_server_configuration().await?;
-
     let install_cfg = server.remote.get_install_instructions().await?;
 
     server.fs.db
@@ -42,7 +35,7 @@ pub async fn engage(server: Arc<Server>) -> servers::Result<()> {
     let success = installation_core(Arc::clone(&server), server_cfg, install_cfg).await;
     Server::mark_install_status(server, success).await;
 
-    Ok(())
+    Ok(success)
 }
 
 async fn installation_core(server: Arc<Server>, server_cfg: GetServerByUuidResponse, install_cfg: GetServerInstallByUuidResponse) -> bool { 
@@ -136,7 +129,7 @@ async fn installation_core(server: Arc<Server>, server_cfg: GetServerByUuidRespo
     }
 
     // spawn a monitoring task
-    let result = install_container.attach(&api, false).await; 
+    let result = install_container.attach(api, false).await; 
 
     let (_input, mut output) = match result {
         Ok(tuple) => tuple,
@@ -150,7 +143,7 @@ async fn installation_core(server: Arc<Server>, server_cfg: GetServerByUuidRespo
 
     let mut success = true;
 
-    match install_container.inspect_existing(&api).await {
+    match install_container.inspect_existing(api).await {
         Ok(resp) => {
             if let Some(code) = resp.state.and_then(|s| s.exit_code) {
                 if code == 0 {
@@ -172,12 +165,12 @@ async fn installation_core(server: Arc<Server>, server_cfg: GetServerByUuidRespo
         }
     }
 
-    match install_container.force_remove(&api).await {
+    match install_container.force_remove(api).await {
         Ok(()) => tracing::debug!("deleted installation container"),
         Err(e) => tracing::error!("failed to delete installation container: {e}"),
     }
 
-    return success;
+    success
 }
 
 
@@ -191,7 +184,7 @@ async fn monitor(
          match result {
             Ok(output) => {
                 let bytes = output.into_bytes();
-                let sanitized = Arc::new(sanitize_output(&bytes));
+                let sanitized = Arc::new(util::sanitize_output(&bytes));
 
                 let msg = OutboundMessage::install_output(Arc::clone(&sanitized));
                 server.websocket.broadcast(msg);
@@ -206,21 +199,6 @@ async fn monitor(
     }
 
     logfile.flush().await;
-}
-
-/// Sanitizes the given bytes to remove bad control characters
-fn sanitize_output(bytes: &[u8]) -> String {
-    // would be better if it didn't strip colors and stuff but oh well
-
-    // strip controls except whitespaces
-    String::from_utf8_lossy(bytes)
-        .as_ref()
-        .chars()
-        // filter if
-        //   - is a replacement char
-        //   - is a non-whitespace control
-        .filter(|c| c != &char::REPLACEMENT_CHARACTER && (!c.is_control() || c.is_whitespace()))
-        .collect::<String>()
 }
 
 async fn write_installer_script(mount_path: &Path, contents: &str) -> io::Result<()> {
@@ -239,7 +217,7 @@ fn docker_install_container_config(
     image: String,
     mounts: Vec<models::Mount>,
 ) -> bollard::container::Config<String> {
-    let env = format_environment_for_docker(&cfg.settings.environment);
+    let env = util::format_environment_for_docker(&cfg.settings.environment);
     let build = &cfg.settings.build;
     
     bollard::container::Config {
@@ -277,48 +255,13 @@ fn docker_install_container_config(
         shell: None,
         // - should we use cgroups?
         host_config: Some({
-            // why is this even signed
-            let mem_hard_limit = i64::max(0, build.memory_limit) * MIB_TO_BYTES;
-            // set hard limit to 20% more than whatever the actual limit is
-            let generous_mem = mem_hard_limit + mem_hard_limit / 5;
-
-            let cpu_period;
-            let cpu_quota;
-            let cpu_shares;
-
-            // wings does this, not giving cpu_period/shares if a cpu limit isn't set
-            // bcuz of java bugs, odd https://github.com/pterodactyl/panel/issues/3988
-            if build.cpu_limit > 0 {
-                cpu_period = Some(100_000); // docker default
-                cpu_shares = Some(1024); // docker default
-                cpu_quota = Some((build.cpu_limit * 1000) as i64); // cpu_limit is in percentage
-            } else {
-                cpu_period = None;
-                cpu_shares = None;
-                cpu_quota = None;
-            }
-
-            // TODO: check for /tmp, tmpfs mount?
-
+            const ONE_GB: i64 = 1024 * 1024 * 1024;
             bollard::models::HostConfig {
-                memory: Some(mem_hard_limit),
-                cgroup_parent: None,
+                memory: Some(4 * ONE_GB),
                 blkio_weight: Some(build.io_weight),
-                cpuset_cpus: build.threads.clone(),
-                memory_swap: Some(build.swap + build.memory_limit),
-                // TODO: Experiment with swappiness. Definitely ensure a high value though.
-                memory_swappiness: Some(70),
-                memory_reservation: Some(generous_mem),
-                cpu_period,
-                cpu_shares,
-                cpu_quota,
-                oom_kill_disable: Some(build.oom_disabled),
+                memory_swap: Some(4 * ONE_GB),
+                memory_reservation: Some(4 * ONE_GB),
                 mounts: Some(mounts),
-                userns_mode: None,
-                // TODO: Config option
-                pids_limit: Some(256),
-                // We should use rootless docker
-                cap_drop: None,
                 ..Default::default()
             }
         }),
@@ -332,12 +275,3 @@ fn normalize_script(script: &str) -> String {
     script.replace('\r', "\n")
 }
 
-fn format_environment_for_docker(env: &HashMap<String, serde_json::Value>) -> Vec<String> {
-    env.iter().map(|(k, v)| {
-        let value = v.as_str()
-            .map(Cow::Borrowed)
-            .unwrap_or_else(|| Cow::Owned(format!("{v}")));
-
-        format!("{k}={value}")
-    }).collect()
-}

@@ -198,7 +198,7 @@ pub struct Mounts {
 }
 
 impl Mounts {
-    pub async fn retrive(&self, typ: MountType) -> io::Result<PathBuf> {
+    pub async fn get(&self, typ: MountType) -> io::Result<PathBuf> {
         let name = format!("{}_{}", self.uuid.as_hyphenated(), typ);
         let path = self.path.join(&name).to_owned();
 

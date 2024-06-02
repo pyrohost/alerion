@@ -44,6 +44,11 @@ impl BindMount {
         Ok(BindMount { path, name })
     }
 
+    pub async fn get(mounts: &Mounts, name: BindMountName) -> io::Result<BindMount> {
+        let path = mounts.get(name.typ).await?;
+        Ok(BindMount { path, name })
+    }
+
     pub fn path(&self) -> &Path {
         self.path.as_path()
     }

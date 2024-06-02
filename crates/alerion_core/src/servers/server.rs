@@ -194,7 +194,15 @@ impl Server {
             return Err(ServerError::Conflict);
         }
 
-        tokio::spawn(docker::install::engage(Arc::clone(this)));
+        let autostart = this.autostart;
+        let server = Arc::clone(this);
+        tokio::spawn(async move {
+            if let Ok(true) = docker::install::engage(Arc::clone(&server)).await {
+                if autostart {
+                    let _ = docker::run::engage(server).await;
+                }
+            }
+        });
 
         Ok(())
     }
