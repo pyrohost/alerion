@@ -39,7 +39,7 @@ pub struct BindMount {
 impl BindMount {
     /// Creates/resets a bind mount.
     pub async fn new_clean(mounts: &Mounts, name: BindMountName) -> io::Result<BindMount> {
-        let path = mounts.force_recreate(name.uuid, name.typ).await?;
+        let path = mounts.force_recreate(name.typ).await?;
 
         Ok(BindMount { path, name })
     }

@@ -1,14 +1,10 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::io;
 use std::fmt;
-use std::sync::Arc;
-use std::ops::{DerefMut, Deref};
 
 use uuid::Uuid;
 use futures::stream::{StreamExt, FuturesUnordered};
 use chrono::offset::Local;
-use serde::{Serialize, Deserialize};
 use tokio::fs;
 use tokio::io::{AsyncWriteExt, BufWriter};
 
@@ -19,32 +15,32 @@ const BACKUPS: &str = "backups";
 const LOGS: &str = "logs";
 const DB_FILE: &str = "db.json";
 
-#[derive(Debug, Clone)]
-pub struct LocalDataHandle {
+#[derive(Debug)]
+pub struct LocalDataPaths {
     path: PathBuf,
-    database: db::Handle,
+    db: db::Root,
 }
 
-impl LocalDataHandle {
-    pub async fn new(path: PathBuf) -> io::Result<Self> {
+impl LocalDataPaths {
+    pub async fn new(path: PathBuf) -> db::Result<Self> {
         tokio::try_join!(
             fs::create_dir_all(path.join(MOUNTS)),
             fs::create_dir_all(path.join(BACKUPS)),
             fs::create_dir_all(path.join(LOGS)),
         )?;
 
-        Ok(LocalDataHandle {
-            database: db::Handle::new(path.join(DB_FILE)),
+        Ok(LocalDataPaths {
+            db: db::Root::init(&path.join(DB_FILE))?,
             path,
         })
     }
 
-    pub fn mounts(&self) -> Mounts {
-        Mounts { path: self.path.join(MOUNTS) }
+    pub fn mounts_of(&self, uuid: Uuid) -> Mounts {
+        Mounts { path: self.path.join(MOUNTS), uuid }
     }
 
-    pub fn db(&self) -> db::Handle {
-        self.database.clone()
+    pub async fn db_of(&self, uuid: Uuid) -> db::Handle {
+        self.db.server(uuid).await
     }
 
     pub async fn logger(&self, uuid: Uuid) -> io::Result<FsLogger> {
@@ -198,11 +194,12 @@ impl fmt::Display for MountType {
 #[derive(Debug, Clone)]
 pub struct Mounts {
     path: PathBuf,
+    uuid: Uuid,
 }
 
 impl Mounts {
-    pub async fn retrive(&self, uuid: Uuid, typ: MountType) -> io::Result<PathBuf> {
-        let name = format!("{}_{}", uuid.as_hyphenated(), typ);
+    pub async fn retrive(&self, typ: MountType) -> io::Result<PathBuf> {
+        let name = format!("{}_{}", self.uuid.as_hyphenated(), typ);
         let path = self.path.join(&name).to_owned();
 
         if !fs::try_exists(&path).await? {
@@ -212,8 +209,8 @@ impl Mounts {
         Ok(path)
     }
 
-    pub async fn force_recreate(&self, uuid: Uuid, typ: MountType) -> io::Result<PathBuf> {
-        let name = format!("{}_{}", uuid.as_hyphenated(), typ);
+    pub async fn force_recreate(&self, typ: MountType) -> io::Result<PathBuf> {
+        let name = format!("{}_{}", self.uuid.as_hyphenated(), typ);
         let path = self.path.join(&name).to_owned();
 
         fs::create_dir_all(&path).await?; 

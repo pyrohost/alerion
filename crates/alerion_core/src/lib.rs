@@ -6,7 +6,7 @@ use fs::config::Config;
 use futures::stream::{FuturesUnordered, StreamExt};
 
 use crate::servers::pool::ServerPool;
-use crate::fs::LocalDataHandle;
+use crate::fs::LocalDataPaths;
 
 pub fn splash() {
     println!(
@@ -38,10 +38,17 @@ pub async fn alerion_main() -> anyhow::Result<()> {
     tracing::info!("starting alerion");
 
     let config = Config::load()?;
-    let localdata = LocalDataHandle::new(config.data_dir.clone()).await?;
 
-    let server_pool = ServerPool::new(&config, localdata.clone()).await?;
+    tracing::debug!("loading data paths");
+    let localdata = LocalDataPaths::new(config.data_dir.clone()).await?;
 
+    tracing::debug!("loading server pool");
+    let server_pool = ServerPool::new(&config, localdata).await?;
+
+    tracing::debug!("fetching existing servers");
+    ServerPool::try_fetch_existing(&server_pool).await;
+
+    tracing::debug!("spawning webserver task");
     let webserver_handle = tokio::spawn(async move {
         let cfg = config.clone();
         let result = webserver::serve(cfg, Arc::clone(&server_pool)).await;

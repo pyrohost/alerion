@@ -26,6 +26,19 @@ pub enum ServerStatus {
     Offline,
 }
 
+impl ServerStatus {
+    /// Use this over `serde_json::to_string`. This provides
+    /// static strings slices which is more optimizer friendly.
+    pub fn to_str(self) -> &'static str {
+        match self {
+            ServerStatus::Running => "running",
+            ServerStatus::Starting => "starting",
+            ServerStatus::Stopping => "stopping",
+            ServerStatus::Offline => "offline",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct NetworkStatistics {
     pub rx_bytes: usize,

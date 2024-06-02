@@ -40,7 +40,7 @@ impl IntoResponse for ServerError {
     }
 }
 
-pub use server::Server;
+pub use server::{OutboundMessage, InboundMessage, Server, State};
 
 pub mod pool;
 pub mod remote;

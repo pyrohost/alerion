@@ -4,12 +4,11 @@ use std::time::Instant;
 use bollard::Docker;
 use tokio::sync::{mpsc, broadcast};
 use uuid::Uuid;
+use serde::{Serialize, Deserialize};
 use alerion_datamodel as dm;
-use parking_lot::Mutex as PlMutex;
-use serde::Serialize;
 
 use crate::servers::remote;
-use crate::fs::{FsLogger, LocalDataHandle, LogFileInterface};
+use crate::fs::{db, FsLogger, LocalDataPaths, Mounts};
 use crate::docker;
 
 use super::ServerError;
@@ -89,41 +88,54 @@ impl WebsocketBucket {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum State {
     /// Empty server, with no egg set.
     Bare,
+    /// Installation process ongoing.
     Installing,
-    Installed,
-}
-
-impl State {
-    pub fn is_bare(&self) -> bool {
-        matches!(self, State::Bare)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Serialize)]
-pub enum ProcState {
-    #[serde(rename = "offline")]
+    /// Unstartable because the installation failed or something else
+    /// brought the server to not be healthy.
+    Unhealthy,
+    /// Installed, but offline
     Offline,
-    #[serde(rename = "starting")]
+    /// Starting
     Starting,
-    #[serde(rename = "running")]
+    /// Running
     Running,
-    #[serde(rename = "stopping")]
+    /// Stopping
     Stopping,
 }
 
-impl ProcState {
-    pub fn to_str(self) -> &'static str {
-        match self {
-            ProcState::Offline => "offline",
-            ProcState::Starting => "starting",
-            ProcState::Running => "running",
-            ProcState::Stopping => "stopping",
+impl State {
+    pub fn from_installation_success(success: bool) -> Self {
+        if success {
+            State::Offline
+        } else {
+            State::Unhealthy
         }
     }
+
+    pub fn is_bare(&self) -> bool {
+        matches!(self, State::Bare)
+    }
+
+    pub fn as_datamodel_status(&self) -> dm::websocket::ServerStatus {
+        use dm::websocket::ServerStatus;
+
+        match self {
+            State::Starting => ServerStatus::Starting,
+            State::Running => ServerStatus::Running,
+            State::Stopping => ServerStatus::Stopping,
+            _ => ServerStatus::Offline,
+        }
+    }
+}
+
+pub struct Fs {
+    pub mounts: Mounts,
+    pub logger: FsLogger,
+    pub db: db::Handle,
 }
 
 // TODO: Remove allow(dead_code) when implemented
@@ -132,17 +144,22 @@ pub struct Server {
     pub start_time: Instant,
     pub websocket: WebsocketBucket,
     pub uuid: Uuid,
-    pub(crate) state: PlMutex<State>,
-    pub(crate) proc_state: PlMutex<ProcState>,
-    remote: remote::ServerApi,
-    docker: Arc<Docker>,
-    localdata: LocalDataHandle,
-    logger: FsLogger,
+    pub(crate) fs: Fs,
+    pub(crate) remote: remote::ServerApi,
+    pub(crate) docker: Arc<Docker>,
+    pub(crate) autostart: bool,
 }
 
 impl Server {
-    /// Creates a bare, uninitiated server.
-    pub async fn new(uuid: Uuid, remote: remote::Api, docker: Arc<Docker>, localdata: LocalDataHandle) -> Result<Arc<Self>, ServerError> {
+    /// Creates a server. This will spawn a task for it's installation
+    /// process if needed.
+    pub async fn new(
+        uuid: Uuid,
+        remote: remote::Api,
+        docker: Arc<Docker>,
+        localdata: &LocalDataPaths,
+        autostart: bool,
+    ) -> Result<Arc<Self>, ServerError> {
         let (websocket, mut ws_receiver) = WebsocketBucket::new();
 
         let server = Arc::new(Server {
@@ -151,10 +168,12 @@ impl Server {
             uuid,
             remote: remote.server_api(uuid),
             docker,
-            state: PlMutex::new(State::Bare),
-            proc_state: PlMutex::new(ProcState::Offline),
-            logger: localdata.logger(uuid).await?,
-            localdata,
+            autostart,
+            fs: Fs {
+                mounts: localdata.mounts_of(uuid),
+                db: localdata.db_of(uuid).await,
+                logger: localdata.logger(uuid).await?,
+            },
         });
 
         tokio::spawn(async move {
@@ -162,58 +181,27 @@ impl Server {
             }
         });
 
+        // don't care about error
+        let _ = Server::install_if_appropriate(&server).await;
+
         Ok(server)
     }
 
-    pub fn start_installation(this: Arc<Server>) -> Result<(), ServerError> {
+    /// Spawns a task for the installation process, if there's no state conflict.
+    pub async fn install_if_appropriate(this: &Arc<Server>) -> Result<(), ServerError> {
         // Server must not be active
-        let mut lock = this.state.lock();
-        if !lock.is_bare() {
+        if !this.get_state().is_bare() {
             tracing::error!("tried to begin installation process, but server is already active");
             return Err(ServerError::Conflict);
         }
 
-        *lock = State::Installing;
-
-        drop(lock);
-        tokio::spawn(installation_process(this));
+        tokio::spawn(docker::install::engage(Arc::clone(this)));
 
         Ok(())
     }
 
-    pub async fn install_logfile(&self) -> LogFileInterface {
-        self.logger.open_install().await
+    pub fn get_state(&self) -> State {
+        self.fs.db.get().state
     }
-
-    pub async fn server_logfile(&self) -> LogFileInterface {
-        self.logger.open_server().await
-    }
-
-    pub async fn set_installation_status(&self, success: bool) -> Result<(), ServerError> {
-        self.remote.post_installation_status(success, false).await?;
-        Ok(())
-    }
-
-    pub(crate) fn docker_api(&self) -> &Docker {
-        &self.docker
-    }
-
-    pub(crate) fn localdata(&self) -> &LocalDataHandle {
-        &self.localdata
-    }
-
-    pub(crate) fn get_proc_state(&self) -> ProcState {
-        *self.proc_state.lock()
-    }
-}
-
-async fn installation_process(server: Arc<Server>) -> Result<(), ServerError> {
-    // Get remote server configuration
-    let server_cfg = server.remote.get_server_configuration().await?;
-    let install_cfg = server.remote.get_install_instructions().await?;
- 
-    docker::install::engage(&server, &server_cfg, install_cfg).await?;
-
-    Ok(())
 }
 

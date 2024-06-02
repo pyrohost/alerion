@@ -5,7 +5,7 @@ use bollard::Docker;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::fs::{LocalDataHandle, Config};
+use crate::fs::{LocalDataPaths, Config};
 use crate::servers::{remote, ServerError, Server};
 use crate::docker;
 
@@ -13,51 +13,44 @@ pub struct ServerPool {
     servers: RwLock<HashMap<Uuid, Arc<Server>>>,
     remote_api: remote::Api,
     docker: Arc<Docker>,
-    localdata: LocalDataHandle,
+    localdata: LocalDataPaths,
 }
 
 impl ServerPool {
-    pub async fn new(config: &Config, localdata: LocalDataHandle) -> Result<Arc<Self>, ServerError> {
+    pub async fn new(config: &Config, localdata: LocalDataPaths) -> Result<Arc<Self>, ServerError> {
         let remote_api = remote::Api::new(config)?;
 
         tracing::info!("initiating connection to Docker Engine");
         let docker = Docker::connect_with_defaults().map_err(docker::DockerError::Api)?;
 
-        let pool = Arc::new(Self {
+        Ok(Arc::new(Self {
             servers: RwLock::new(HashMap::new()),
             remote_api,
             docker: Arc::new(docker),
             localdata,
-        });
-
-
-        for data in pool.remote_api.get_servers().await? {
-            let pool_cpy = Arc::clone(&pool);
-            tokio::spawn(async move {
-                pool_cpy.create(data.uuid, true).await
-            });
-        }
-
-        Ok(pool)
+        }))
     }
 
-    #[tracing::instrument(name = "fetch_existing_servers", skip(self))]
-    pub async fn fetch_existing(&self) -> Result<(), ServerError> {
-        tracing::info!("fetching existing servers on this node");
-
-        let servers = self.remote_api.get_servers().await?;
-
-        for s in servers {
-            tracing::info!("recovering server {}", s.uuid);
-
-            let _uuid = s.uuid;
-
-            tracing::error!("!!!!!!!!!TODO: RECOVERING SERVERS");
+    /// Retrieves all preexisting servers from the panel and starts their installation process in
+    /// a separate task, if needed.
+    #[tracing::instrument(skip_all)]
+    pub async fn try_fetch_existing(&self) {
+        match self.remote_api.get_servers().await {
+            Ok(servers) => {
+                for data in servers {
+                    if let Err(e) = self.create(data.uuid, true).await {
+                        tracing::error!("creating server '{}' from the remote list of preexisting servers failed: {e}", data.uuid.as_hyphenated());
+                    }
+                }
+            },
+            Err(e) => {
+                tracing::error!("couldn't fetch existing servers from remote api: {e}");
+            }
         }
-
-        Ok(())
     }
 
+    /// Adds a server to the pool and begins its installation process in a separate task,
+    /// if needed.
     #[tracing::instrument(name = "create_server", skip(self))]
     pub async fn create(
         &self,
@@ -70,14 +63,13 @@ impl ServerPool {
             drop(read);
 
             let docker = Arc::clone(&self.docker);
-            let server = Server::new(uuid, self.remote_api.clone(), docker, self.localdata.clone()).await?;
+            // this will start the installation if needed
+            let server = Server::new(uuid, self.remote_api.clone(), docker, &self.localdata, start_on_completion).await?;
 
             let mut writer = self.servers.write().await;
             writer.insert(uuid, Arc::clone(&server));
 
             drop(writer);
-
-            Server::start_installation(Arc::clone(&server))?;
 
             Ok(server)
         } else {

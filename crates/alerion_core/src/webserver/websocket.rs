@@ -9,8 +9,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use smallvec::{smallvec, SmallVec};
 use uuid::Uuid;
+use alerion_datamodel as dm;
 
-use crate::servers::server::{Server, ProcState, InboundMessage, OutboundMessage};
+use crate::servers::server::{Server, InboundMessage, OutboundMessage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecvWebsocketEvent {
@@ -29,6 +30,9 @@ impl RecvWebsocketEvent {
     }
 }
 
+/// Serialization type for outgoing websocket events. Uses a
+/// lifetime to reduce useless intermediate allocations; the
+/// type should only exist intermittently anyways.
 #[derive(Debug, Clone, Serialize)]
 pub struct SendWebsocketEvent<'a> {
     event: SendEventType,
@@ -57,14 +61,15 @@ impl<'a> SendWebsocketEvent<'a> {
         }
     }
 
-    pub fn status(status: ProcState) -> Self {
+    pub fn status(status: dm::websocket::ServerStatus) -> Self {
         Self {
             event: SendEventType::Status,
             args: Some(smallvec![status.to_str()])
         }
     }
 
-    /// Serializes the event and produces an error message if serialization fails.
+    /// Serializes the event and produces an error message if serialization fails,
+    /// although this shouldn't really happen.
     pub fn serialize(&self) -> Option<String> {
         let out = serde_json::to_string(self);
 
@@ -197,11 +202,11 @@ pub async fn websocket_handler(
                             tracing::debug!("authenticated");
                             *state = Some(CurrentAuth::new(perms));
 
-                            let proc_state = server.get_proc_state();
+                            let state = server.get_state().as_datamodel_status();
 
                             batch_send(sink, &[
                                 SendWebsocketEvent::auth_success(),
-                                SendWebsocketEvent::status(proc_state),
+                                SendWebsocketEvent::status(state),
                             ]).await;
                         }
                         Ok(_) => {

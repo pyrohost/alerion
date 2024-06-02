@@ -12,7 +12,7 @@ use bollard::models;
 
 use alerion_datamodel::remote::server::{GetServerByUuidResponse, GetServerInstallByUuidResponse};
 use crate::docker::models::bind_mount::BindMountName;
-use crate::servers::server::{Server, State, OutboundMessage};
+use crate::servers::{self, OutboundMessage, Server, State};
 use crate::docker::{
     self,
     models::{BindMount, Container, ContainerName},
@@ -31,21 +31,24 @@ const MIB_TO_BYTES: i64 = 1000 * 1000;
 /// If this is a reinstall, delete the involved containers and volumes beforehand
 /// to avoid warnings being emitted.  
 pub async fn engage(
-    server: &Arc<Server>,
-    server_cfg: &GetServerByUuidResponse, 
-    install_cfg: GetServerInstallByUuidResponse,
-) -> docker::Result<()> {
+    server: Arc<Server>,
+) -> servers::Result<()> {
     let uuid = server.uuid;
-    let api = server.docker_api();
-    let localdata = server.localdata();
+    let api = &server.docker;
 
-    let mounts = localdata.mounts();
+    server.fs.db
+        .update(|m| m.state = State::Installing).await;
+
+    let server_cfg = server.remote.get_server_configuration().await?;
+    let install_cfg = server.remote.get_install_instructions().await?;
+
+    let mounts = &server.fs.mounts;
 
     // 1. Installation mount
     let install_mount = {
         tracing::debug!("creating installer bind mount");
         let name = BindMountName::new_installer(uuid);
-        BindMount::new_clean(&mounts, name).await?
+        BindMount::new_clean(mounts, name).await?
     };
 
     // 2. Create the server's bind mount.
@@ -56,7 +59,7 @@ pub async fn engage(
     let server_mount = {
         tracing::debug!("creating server bind mount");
         let name = BindMountName::new_server(uuid);
-        BindMount::new_clean(&mounts, name).await?
+        BindMount::new_clean(mounts, name).await?
     };
 
 
@@ -77,7 +80,7 @@ pub async fn engage(
 
         let config = docker_install_container_config(
             &name,
-            server_cfg,
+            &server_cfg,
             entrypoint,
             container_image,
             volumes,
@@ -97,12 +100,12 @@ pub async fn engage(
 
     if let Err(e) = install_container.start(api).await {
         tracing::error!("container failed to start: {e:?}");
-        return Err(e);
+        return Err(e.into());
     }
 
     // spawn a monitoring task
     {
-        let server = Arc::clone(server);
+        // move `Arc<Server>` here
         let api = api.clone();
         tokio::spawn(async move {
             let result = install_container.attach(&api, false).await; 
@@ -140,12 +143,21 @@ pub async fn engage(
                 }
             }
 
-            *server.state.lock() = State::Installed;
+            let server_install_status = Arc::clone(&server);
+            let fut_online_status = async move {
+                match server_install_status.remote.post_installation_status(success, false).await {
+                    Ok(()) => tracing::debug!("notified remote API of installation status"),
+                    Err(e) => tracing::error!("couldn't notify the panel about the installation status: {e}"),
+                }
+            };
 
-            match server.set_installation_status(success).await {
-                Ok(()) => tracing::debug!("notified remote API of installation status"),
-                Err(e) => tracing::error!("couldn't notify the panel about the installation status: {e}"),
-            }
+            let fut_db_update = async {
+                server.fs.db.update(|s| {
+                    s.state = State::from_installation_success(success);
+                }).await;
+            };
+
+            tokio::join!(fut_online_status, fut_db_update);
         });
     }
 
@@ -159,7 +171,7 @@ async fn monitor(
     server: &Arc<Server>,
     stream: &mut (dyn Stream<Item = Result<LogOutput, BollardError>> + Unpin + Send),
 ) {
-    let mut logfile = server.install_logfile().await;
+    let mut logfile = server.fs.logger.open_install().await;
 
     while let Some(result) = stream.next().await {
          match result {

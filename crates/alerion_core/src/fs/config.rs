@@ -16,7 +16,7 @@ use super::wings_compat;
 pub enum ConfigError {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error(transparent)]
+    #[error("failed to parse configuration file: {0}")]
     Json(#[from] serde_json::Error),
     #[error("could not read environment variable '{var}': {err}")]
     Env {
